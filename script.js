@@ -489,15 +489,16 @@ function buildTextSizePicker() {
   const savedSize = localStorage.getItem("textSize") || "14px";
   
   // Apply saved size to chatbox immediately on load
-  if (chatbox) chatbox.style.fontSize = savedSize;
+  const chatboxElement = document.getElementById("chatbox");
+  if (chatboxElement) chatboxElement.style.fontSize = savedSize;
 
   ["12px","14px","16px","18px"].forEach(size => {
     const btn = document.createElement("button");
     btn.className = "size-btn" + (savedSize === size ? " active" : "");
     btn.textContent = size;
     btn.addEventListener("click", () => {
-      // Specifically target the chatbox so it overrides global CSS
-      chatbox.style.fontSize = size;
+      // Specifically target the chatbox so messages scale
+      if (chatboxElement) chatboxElement.style.fontSize = size;
       localStorage.setItem("textSize", size);
       row.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
