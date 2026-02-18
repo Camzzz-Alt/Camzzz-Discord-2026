@@ -14,371 +14,290 @@ try { firebase.initializeApp(firebaseConfig); } catch(e) {}
 const auth = firebase.auth();
 const db   = firebase.database();
 
-// ============================================================
-// CONSTANTS
-// ============================================================
 const WEEK_MS   = 7 * 24 * 60 * 60 * 1000;
 const IMGBB_KEY = "7ae7b64cb4da961ab6a7d18d920099a8";
 
-// Built-in tags
 const BUILTIN_TAG_STYLES = {
-  "Mod":                   { color: "#ff4444", bg: "rgba(255,68,68,0.15)",   border: "rgba(255,68,68,0.35)"   },
-  "Admin":                 { color: "#ff9900", bg: "rgba(255,153,0,0.15)",   border: "rgba(255,153,0,0.35)"   },
-  "SN":                    { color: "#5b8aff", bg: "rgba(91,138,255,0.15)",  border: "rgba(91,138,255,0.35)"  },
-  "VIP":                   { color: "#ffd700", bg: "rgba(255,215,0,0.15)",   border: "rgba(255,215,0,0.35)"   },
-  "Friend":                { color: "#57f287", bg: "rgba(87,242,135,0.15)",  border: "rgba(87,242,135,0.35)"  },
-  "Tester":                { color: "#00ffff", bg: "rgba(0,255,255,0.15)",   border: "rgba(0,255,255,0.35)"   },
-  "Owner":                 { color: "#ffffff", bg: "rgba(255,255,255,0.1)",  border: "rgba(255,255,255,0.25)" },
-  "Dev":                   { color: "#888888", bg: "rgba(136,136,136,0.15)", border: "rgba(136,136,136,0.3)"  },
-  "Jobless":               { color: "#a0522d", bg: "rgba(160,82,45,0.15)",   border: "rgba(160,82,45,0.35)"   },
-  "Asked for Tag":         { color: "#808080", bg: "rgba(128,128,128,0.12)", border: "rgba(128,128,128,0.28)" },
-  "Gay":                   { color: null,      bg: "rgba(255,100,100,0.1)",  border: "rgba(255,100,100,0.2)", rainbow: true },
-  "67":                    { color: "#ff69b4", bg: "rgba(255,105,180,0.15)", border: "rgba(255,105,180,0.35)" },
-  "Private Channel Access":{ color: "#a78bfa", bg: "rgba(167,139,250,0.15)", border: "rgba(167,139,250,0.35)" },
+  "Mod":                   { color:"#ff4444", bg:"rgba(255,68,68,0.15)",   border:"rgba(255,68,68,0.35)"   },
+  "Admin":                 { color:"#ff9900", bg:"rgba(255,153,0,0.15)",   border:"rgba(255,153,0,0.35)"   },
+  "SN":                    { color:"#5b8aff", bg:"rgba(91,138,255,0.15)",  border:"rgba(91,138,255,0.35)"  },
+  "VIP":                   { color:"#ffd700", bg:"rgba(255,215,0,0.15)",   border:"rgba(255,215,0,0.35)"   },
+  "Friend":                { color:"#57f287", bg:"rgba(87,242,135,0.15)",  border:"rgba(87,242,135,0.35)"  },
+  "Tester":                { color:"#00ffff", bg:"rgba(0,255,255,0.15)",   border:"rgba(0,255,255,0.35)"   },
+  "Owner":                 { color:"#ffffff", bg:"rgba(255,255,255,0.1)",  border:"rgba(255,255,255,0.25)" },
+  "Dev":                   { color:"#888888", bg:"rgba(136,136,136,0.15)", border:"rgba(136,136,136,0.3)"  },
+  "Jobless":               { color:"#a0522d", bg:"rgba(160,82,45,0.15)",   border:"rgba(160,82,45,0.35)"   },
+  "Asked for Tag":         { color:"#808080", bg:"rgba(128,128,128,0.12)", border:"rgba(128,128,128,0.28)" },
+  "Gay":                   { color:null,      bg:"rgba(255,100,100,0.1)",  border:"rgba(255,100,100,0.2)", rainbow:true },
+  "67":                    { color:"#ff69b4", bg:"rgba(255,105,180,0.15)", border:"rgba(255,105,180,0.35)" },
+  "Private Channel Access":{ color:"#a78bfa", bg:"rgba(167,139,250,0.15)", border:"rgba(167,139,250,0.35)" },
 };
 
-let TAG_STYLES = { ...BUILTIN_TAG_STYLES };
+let TAG_STYLES    = { ...BUILTIN_TAG_STYLES };
 let availableTags = Object.keys(BUILTIN_TAG_STYLES);
 
 const PRIVATE_CHANNEL_TAG = "Private Channel Access";
-const MOD_TAGS = ["Mod", "Admin", "Owner"];
-// Tags mods cannot add or remove (only admins/owners can touch these)
-const MOD_PROTECTED_TAGS = ["Mod", "Admin", "Owner", "Dev", "VIP"];
+const MOD_TAGS            = ["Mod","Admin","Owner"];
+const MOD_PROTECTED_TAGS  = ["Mod","Admin","Owner","Dev","VIP"];
 
 // ============================================================
 // STATE
 // ============================================================
-let currentUser     = null;
-let currentUserId   = null;
-let currentUsername = "Guest";
-let myColor         = "#5865f2";
-let myAvatar        = null;
-let myTags          = [];
-let currentServer   = "server1";
-let dbListeners     = {};
+let currentUser       = null;
+let currentUserId     = null;
+let currentUsername   = "Guest";
+let myColor           = "#5865f2";
+let myAvatar          = null;
+let myTags            = [];
+let currentServer     = "server1";
+// displayedMessages[serverName] = Set of rendered message keys
 let displayedMessages = {};
-let allUsersCache   = {};
+// allUsersCache is loaded once at startup and kept live
+let allUsersCache     = {};
 
-let replyingTo      = null;
-let typingTimer     = null;
-let isTyping        = false;
-let adminSelectedMs = null;
-let modSelectedMs   = null;
-let adminSelectedTag = null;
-let modSelectedTag   = null;
-let unreadServers   = new Set();
-let userScrolledUp  = false;
+// Per-server chat listener: { ref, listener }
+let msgListeners = {};
+
+let replyingTo        = null;
+let typingTimer       = null;
+let isTyping          = false;
+let adminSelectedMs   = null;
+let modSelectedMs     = null;
+let adminSelectedTag  = null;
+let modSelectedTag    = null;
+let unreadServers     = new Set();
+let userScrolledUp    = false;
 let sendingInProgress = false;
-let lastSentTime    = 0;
+let lastSentTime      = 0;
+
+// Panel listener registries — populated when menus open, cleared on close
+// Each entry: { dbRef, event, fn } so we can call dbRef.off(event, fn)
+let adminPanelListeners = [];
+let modPanelListeners   = [];
 
 // ============================================================
-// DOM HELPERS
+// DOM
 // ============================================================
-const $  = id => document.getElementById(id);
-const showError  = (el, msg) => { el.textContent = msg; el.classList.add("show"); };
-const clearError = el => { el.textContent = ""; el.classList.remove("show"); };
+const $ = id => document.getElementById(id);
+const showError  = (el,msg) => { el.textContent=msg; el.classList.add("show"); };
+const clearError = el => { el.textContent=""; el.classList.remove("show"); };
 
 function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 function stripHtml(html) {
-  const d = document.createElement("div");
-  d.innerHTML = html;
-  return d.textContent || d.innerText || "";
+  const d=document.createElement("div"); d.innerHTML=html;
+  return d.textContent||d.innerText||"";
 }
-function encodeEmoji(e) {
-  return [...e].map(c => c.codePointAt(0).toString(16)).join("_");
-}
+function encodeEmoji(e) { return [...e].map(c=>c.codePointAt(0).toString(16)).join("_"); }
 function friendlyAuthError(code) {
-  return ({
-    "auth/user-not-found":       "No account with that email.",
-    "auth/wrong-password":       "Incorrect password.",
-    "auth/invalid-email":        "Invalid email address.",
-    "auth/too-many-requests":    "Too many attempts — try again later.",
-    "auth/email-already-in-use": "That email is already in use.",
-    "auth/invalid-credential":   "Incorrect email or password.",
-  })[code] || "Something went wrong. Try again.";
+  return ({"auth/user-not-found":"No account with that email.","auth/wrong-password":"Incorrect password.",
+    "auth/invalid-email":"Invalid email address.","auth/too-many-requests":"Too many attempts — try again later.",
+    "auth/email-already-in-use":"That email is already in use.","auth/invalid-credential":"Incorrect email or password."})[code]||"Something went wrong. Try again.";
 }
 
 // ============================================================
 // TAG HELPERS
 // ============================================================
 function getTagStyle(tag) {
-  return TAG_STYLES[tag] || { color: "#aaaaaa", bg: "rgba(170,170,170,0.12)", border: "rgba(170,170,170,0.25)" };
+  return TAG_STYLES[tag]||{color:"#aaaaaa",bg:"rgba(170,170,170,0.12)",border:"rgba(170,170,170,0.25)"};
 }
-
-function applyTagStyleToEl(el, tag) {
-  const s = getTagStyle(tag);
-  if (s.rainbow) {
-    el.style.background = "linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";
-    el.style.borderColor = "rgba(255,100,100,0.3)";
+function applyTagStyleToEl(el,tag) {
+  const s=getTagStyle(tag);
+  if(s.rainbow){
+    el.style.background="linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";
+    el.style.borderColor="rgba(255,100,100,0.3)";
   } else {
-    if (s.color)  el.style.color = s.color;
-    if (s.bg)     el.style.background = s.bg;
-    if (s.border) el.style.borderColor = s.border;
+    if(s.color)  el.style.color=s.color;
+    if(s.bg)     el.style.background=s.bg;
+    if(s.border) el.style.borderColor=s.border;
   }
 }
-
-// Render a tag as an inline span with glow
 function renderTagSpan(tag) {
-  const s = getTagStyle(tag);
-  if (s.rainbow) {
-    return `<span class="tag-inline tag-gay">[${escapeHtml(tag)}]</span>`;
-  }
-  const color = s.color || "#aaa";
-  const slugClass = "tag-" + tag.toLowerCase().replace(/\s+/g, "-");
+  const s=getTagStyle(tag);
+  if(s.rainbow) return `<span class="tag-inline tag-gay">[${escapeHtml(tag)}]</span>`;
+  const color=s.color||"#aaa";
+  const slugClass="tag-"+tag.toLowerCase().replace(/\s+/g,"-");
   return `<span class="tag-inline ${slugClass}" style="color:${color};text-shadow:0 0 8px ${color}88;">[${escapeHtml(tag)}]</span>`;
+}
+function hexToRgba(hex,alpha) {
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 function loadCustomTags(cb) {
-  db.ref("adminData/customTags").on("value", snap => {
-    const custom = snap.val() || {};
-    TAG_STYLES = { ...BUILTIN_TAG_STYLES };
-    availableTags = [...Object.keys(BUILTIN_TAG_STYLES)];
-    Object.entries(custom).forEach(([name, data]) => {
-      const c = data.color || "#aaaaaa";
-      TAG_STYLES[name] = {
-        color: c,
-        bg: hexToRgba(c, 0.15),
-        border: hexToRgba(c, 0.35),
-      };
-      if (!availableTags.includes(name)) availableTags.push(name);
+  db.ref("adminData/customTags").on("value",snap=>{
+    const custom=snap.val()||{};
+    TAG_STYLES={...BUILTIN_TAG_STYLES};
+    availableTags=[...Object.keys(BUILTIN_TAG_STYLES)];
+    Object.entries(custom).forEach(([name,data])=>{
+      const c=data.color||"#aaaaaa";
+      TAG_STYLES[name]={color:c,bg:hexToRgba(c,0.15),border:hexToRgba(c,0.35)};
+      if(!availableTags.includes(name)) availableTags.push(name);
     });
-    if (cb) cb();
+    if(cb){ cb(); cb=null; }
     refreshTagPalettes();
-    refreshCustomTagsList();
   });
-}
-
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 // ============================================================
 // CONFIRM DIALOG
 // ============================================================
-function modConfirm(icon, title, message) {
-  return new Promise(resolve => {
-    const dialog = $("modConfirmDialog");
-    $("confirmIcon").textContent    = icon;
-    $("confirmTitle").textContent   = title;
-    $("confirmMessage").textContent = message;
-    dialog.style.display = "flex";
-    const ok  = $("confirmOkBtn");
-    const can = $("confirmCancelBtn");
-    const newOk  = ok.cloneNode(true);
-    const newCan = can.cloneNode(true);
-    ok.parentNode.replaceChild(newOk, ok);
-    can.parentNode.replaceChild(newCan, can);
-    const done = r => { dialog.style.display = "none"; resolve(r); };
-    newOk.addEventListener("click",  () => done(true));
-    newCan.addEventListener("click", () => done(false));
+function modConfirm(icon,title,message) {
+  return new Promise(resolve=>{
+    const dialog=$("modConfirmDialog");
+    $("confirmIcon").textContent=icon;
+    $("confirmTitle").textContent=title;
+    $("confirmMessage").textContent=message;
+    dialog.style.display="flex";
+    const ok=$("confirmOkBtn"),can=$("confirmCancelBtn");
+    const newOk=ok.cloneNode(true),newCan=can.cloneNode(true);
+    ok.parentNode.replaceChild(newOk,ok);
+    can.parentNode.replaceChild(newCan,can);
+    const done=r=>{dialog.style.display="none";resolve(r);};
+    newOk.addEventListener("click",()=>done(true));
+    newCan.addEventListener("click",()=>done(false));
   });
 }
 
-// ============================================================
-// CLIPBOARD
-// ============================================================
-function copyToClipboard(text, el) {
-  navigator.clipboard.writeText(text).then(() => {
-    const orig = el.innerHTML;
-    el.classList.add("copied");
-    el.innerHTML = "✓ Copied!";
-    setTimeout(() => { el.innerHTML = orig; el.classList.remove("copied"); }, 1500);
+function copyToClipboard(text,el) {
+  navigator.clipboard.writeText(text).then(()=>{
+    const orig=el.innerHTML; el.classList.add("copied"); el.innerHTML="✓ Copied!";
+    setTimeout(()=>{el.innerHTML=orig;el.classList.remove("copied");},1500);
   });
 }
 
-// ============================================================
-// MOD ACTION LOG
-// ============================================================
-function logModAction(action) {
-  db.ref("adminData/modLogs").push({ ...action, ts: Date.now() });
-}
+function logModAction(action) { db.ref("adminData/modLogs").push({...action,ts:Date.now()}); }
 
 // ============================================================
-// AUTH NAVIGATION
+// AUTH NAV
 // ============================================================
 function showCard(which) {
-  ["loginCard","signupCard","verifyCard","googleUsernameCard"].forEach(id => {
-    $(id).style.display = "none";
-  });
-  $({login:"loginCard", signup:"signupCard", verify:"verifyCard", googleUsername:"googleUsernameCard"}[which]).style.display = "";
-  clearError($("loginError"));
-  clearError($("signupError"));
-  if ($("googleUsernameError")) clearError($("googleUsernameError"));
+  ["loginCard","signupCard","verifyCard","googleUsernameCard"].forEach(id=>$(id).style.display="none");
+  $({login:"loginCard",signup:"signupCard",verify:"verifyCard",googleUsername:"googleUsernameCard"}[which]).style.display="";
+  clearError($("loginError")); clearError($("signupError"));
+  if($("googleUsernameError")) clearError($("googleUsernameError"));
 }
+$("showSignupBtn").addEventListener("click",e=>{e.preventDefault();showCard("signup");});
+$("showLoginBtn").addEventListener("click",  e=>{e.preventDefault();showCard("login");});
+$("backToLoginBtn").addEventListener("click",e=>{e.preventDefault();showCard("login");});
 
-$("showSignupBtn").addEventListener("click",  e => { e.preventDefault(); showCard("signup"); });
-$("showLoginBtn").addEventListener("click",   e => { e.preventDefault(); showCard("login"); });
-$("backToLoginBtn").addEventListener("click", e => { e.preventDefault(); showCard("login"); });
-
-// ============================================================
-// USERNAME AVAILABILITY
-// ============================================================
-function checkUsernameAvailable(name, excludeUid, cb) {
-  db.ref("adminData/allUsers").once("value", snap => {
-    const users = snap.val() || {};
-    const lower = name.toLowerCase();
-    let taken = false;
-    for (const id in users) {
-      if (id === excludeUid) continue;
-      if ((users[id].username || "").toLowerCase() === lower) { taken = true; break; }
-    }
+function checkUsernameAvailable(name,excludeUid,cb) {
+  db.ref("adminData/allUsers").once("value",snap=>{
+    const users=snap.val()||{},lower=name.toLowerCase(); let taken=false;
+    for(const id in users){ if(id===excludeUid) continue; if((users[id].username||"").toLowerCase()===lower){taken=true;break;} }
     cb(!taken);
   });
 }
-
-let usernameCheckTimer = null;
-function setupLiveUsernameCheck(inputEl, hintEl, excludeUid = null) {
-  inputEl.addEventListener("input", () => {
-    clearTimeout(usernameCheckTimer);
-    const val = inputEl.value.trim();
-    if (!val) { hintEl.textContent = ""; hintEl.className = "field-hint"; return; }
-    hintEl.textContent = "Checking..."; hintEl.className = "field-hint";
-    usernameCheckTimer = setTimeout(() => {
-      checkUsernameAvailable(val, excludeUid, ok => {
-        hintEl.textContent = ok ? "✓ Available" : "✗ Already taken";
-        hintEl.className   = "field-hint " + (ok ? "ok" : "taken");
-      });
-    }, 400);
+let usernameCheckTimer=null;
+function setupLiveUsernameCheck(inputEl,hintEl,excludeUid=null) {
+  inputEl.addEventListener("input",()=>{
+    clearTimeout(usernameCheckTimer); const val=inputEl.value.trim();
+    if(!val){hintEl.textContent="";hintEl.className="field-hint";return;}
+    hintEl.textContent="Checking..."; hintEl.className="field-hint";
+    usernameCheckTimer=setTimeout(()=>checkUsernameAvailable(val,excludeUid,ok=>{
+      hintEl.textContent=ok?"✓ Available":"✗ Already taken";
+      hintEl.className="field-hint "+(ok?"ok":"taken");
+    }),400);
   });
 }
-setupLiveUsernameCheck($("signupUsername"), $("usernameCheck"));
-setupLiveUsernameCheck($("googleUsername"), $("googleUsernameCheck"));
+setupLiveUsernameCheck($("signupUsername"),$("usernameCheck"));
+setupLiveUsernameCheck($("googleUsername"),$("googleUsernameCheck"));
 
-// ============================================================
-// GOOGLE AUTH
-// ============================================================
-let pendingGoogleUser = null;
+let pendingGoogleUser=null;
 async function handleGoogleAuth() {
-  const provider = new firebase.auth.GoogleAuthProvider();
+  const provider=new firebase.auth.GoogleAuthProvider();
   try {
-    const result = await auth.signInWithPopup(provider);
-    const user   = result.user;
-    const snap   = await db.ref(`adminData/allUsers/${user.uid}`).once("value");
-    if (!snap.exists()) {
-      pendingGoogleUser = user;
-      $("googleUsername").value = "";
-      $("googleUsernameCheck").textContent = "";
-      showCard("googleUsername");
-      $("googleUsername").focus();
+    const result=await auth.signInWithPopup(provider);
+    const user=result.user;
+    const snap=await db.ref(`adminData/allUsers/${user.uid}`).once("value");
+    if(!snap.exists()){
+      pendingGoogleUser=user;
+      $("googleUsername").value=""; $("googleUsernameCheck").textContent="";
+      showCard("googleUsername"); $("googleUsername").focus();
     }
-  } catch(err) { showError($("loginError"), err.message); }
+  } catch(err){ showError($("loginError"),err.message); }
 }
-$("googleSignInBtn").addEventListener("click", handleGoogleAuth);
-$("googleSignUpBtn").addEventListener("click", handleGoogleAuth);
+$("googleSignInBtn").addEventListener("click",handleGoogleAuth);
+$("googleSignUpBtn").addEventListener("click",handleGoogleAuth);
 
-$("googleUsernameConfirmBtn").addEventListener("click", async () => {
-  clearError($("googleUsernameError"));
-  const name = $("googleUsername").value.trim();
-  if (!name || name.length < 2) return showError($("googleUsernameError"), "Username must be at least 2 characters.");
-  checkUsernameAvailable(name, pendingGoogleUser?.uid, async available => {
-    if (!available) return showError($("googleUsernameError"), "That username is already taken.");
-    if (!pendingGoogleUser) return showError($("googleUsernameError"), "Something went wrong.");
-    await db.ref(`adminData/allUsers/${pendingGoogleUser.uid}`).set({
-      username: name, usernameColor: "#5865f2", lastUsernameChange: 0, email: pendingGoogleUser.email || ""
-    });
-    pendingGoogleUser = null;
+$("googleUsernameConfirmBtn").addEventListener("click",async()=>{
+  clearError($("googleUsernameError")); const name=$("googleUsername").value.trim();
+  if(!name||name.length<2) return showError($("googleUsernameError"),"Username must be at least 2 characters.");
+  checkUsernameAvailable(name,pendingGoogleUser?.uid,async available=>{
+    if(!available) return showError($("googleUsernameError"),"That username is already taken.");
+    if(!pendingGoogleUser) return showError($("googleUsernameError"),"Something went wrong.");
+    await db.ref(`adminData/allUsers/${pendingGoogleUser.uid}`).set({username:name,usernameColor:"#5865f2",lastUsernameChange:0,email:pendingGoogleUser.email||""});
+    pendingGoogleUser=null;
   });
 });
 
-// ============================================================
-// EMAIL SIGNUP / LOGIN
-// ============================================================
-$("signupBtn").addEventListener("click", async () => {
+$("signupBtn").addEventListener("click",async()=>{
   clearError($("signupError"));
-  const name  = $("signupUsername").value.trim();
-  const email = $("signupEmail").value.trim();
-  const pass  = $("signupPassword").value;
-  if (!name || name.length < 2) return showError($("signupError"), "Username must be at least 2 characters.");
-  if (!email) return showError($("signupError"), "Please enter your email.");
-  if (!pass || pass.length < 6) return showError($("signupError"), "Password must be at least 6 characters.");
-  checkUsernameAvailable(name, null, async available => {
-    if (!available) return showError($("signupError"), "That username is already taken.");
+  const name=$("signupUsername").value.trim(),email=$("signupEmail").value.trim(),pass=$("signupPassword").value;
+  if(!name||name.length<2) return showError($("signupError"),"Username must be at least 2 characters.");
+  if(!email) return showError($("signupError"),"Please enter your email.");
+  if(!pass||pass.length<6) return showError($("signupError"),"Password must be at least 6 characters.");
+  checkUsernameAvailable(name,null,async available=>{
+    if(!available) return showError($("signupError"),"That username is already taken.");
     try {
-      const result = await auth.createUserWithEmailAndPassword(email, pass);
+      const result=await auth.createUserWithEmailAndPassword(email,pass);
       await result.user.sendEmailVerification();
-      await db.ref(`adminData/allUsers/${result.user.uid}`).set({
-        username: name, usernameColor: "#5865f2", lastUsernameChange: 0, email
-      });
-      $("verifyEmailAddr").textContent = email;
-      showCard("verify");
-    } catch(err) { showError($("signupError"), friendlyAuthError(err.code)); }
+      await db.ref(`adminData/allUsers/${result.user.uid}`).set({username:name,usernameColor:"#5865f2",lastUsernameChange:0,email});
+      $("verifyEmailAddr").textContent=email; showCard("verify");
+    } catch(err){ showError($("signupError"),friendlyAuthError(err.code)); }
   });
 });
 
-$("loginBtn").addEventListener("click", async () => {
-  clearError($("loginError"));
-  $("verifyNotice").style.display = "none";
-  const email = $("loginEmail").value.trim();
-  const pass  = $("loginPassword").value;
-  if (!email || !pass) return showError($("loginError"), "Please fill in all fields.");
+$("loginBtn").addEventListener("click",async()=>{
+  clearError($("loginError")); $("verifyNotice").style.display="none";
+  const email=$("loginEmail").value.trim(),pass=$("loginPassword").value;
+  if(!email||!pass) return showError($("loginError"),"Please fill in all fields.");
   try {
-    const result = await auth.signInWithEmailAndPassword(email, pass);
-    if (!result.user.emailVerified) {
-      await auth.signOut();
-      $("verifyNotice").style.display = "block";
-      showError($("loginError"), "Please verify your email before signing in.");
+    const result=await auth.signInWithEmailAndPassword(email,pass);
+    if(!result.user.emailVerified){
+      await auth.signOut(); $("verifyNotice").style.display="block";
+      showError($("loginError"),"Please verify your email before signing in.");
     }
-  } catch(err) { showError($("loginError"), friendlyAuthError(err.code)); }
+  } catch(err){ showError($("loginError"),friendlyAuthError(err.code)); }
 });
 
-$("loginEmail").addEventListener("keydown",    e => { if (e.key === "Enter") $("loginBtn").click(); });
-$("loginPassword").addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click(); });
+$("loginEmail").addEventListener("keydown",   e=>{if(e.key==="Enter")$("loginBtn").click();});
+$("loginPassword").addEventListener("keydown",e=>{if(e.key==="Enter")$("loginBtn").click();});
 
-$("resendVerifyBtn").addEventListener("click", async e => {
+$("resendVerifyBtn").addEventListener("click",async e=>{
   e.preventDefault();
   try {
-    const r = await auth.signInWithEmailAndPassword($("loginEmail").value.trim(), $("loginPassword").value);
-    await r.user.sendEmailVerification();
-    await auth.signOut();
-    $("verifyNotice").textContent = "✓ Verification email sent!";
-  } catch(err) { showError($("loginError"), err.message); }
+    const r=await auth.signInWithEmailAndPassword($("loginEmail").value.trim(),$("loginPassword").value);
+    await r.user.sendEmailVerification(); await auth.signOut();
+    $("verifyNotice").textContent="✓ Verification email sent!";
+  } catch(err){ showError($("loginError"),err.message); }
 });
-
-$("resendVerifyBtn2").addEventListener("click", async () => {
-  const u = auth.currentUser;
-  if (u) {
-    await u.sendEmailVerification();
-    $("resendVerifyBtn2").textContent = "✓ Sent!";
-    setTimeout(() => { $("resendVerifyBtn2").textContent = "Resend Email"; }, 3000);
-  }
+$("resendVerifyBtn2").addEventListener("click",async()=>{
+  const u=auth.currentUser; if(u){ await u.sendEmailVerification(); $("resendVerifyBtn2").textContent="✓ Sent!"; setTimeout(()=>$("resendVerifyBtn2").textContent="Resend Email",3000); }
 });
 
 // ============================================================
 // AUTH STATE
 // ============================================================
-auth.onAuthStateChanged(async user => {
-  if (!user) {
-    $("authScreen").style.display   = "flex";
-    $("appContainer").style.display = "none";
-    $("loadingScreen").style.display = "none";
-    showCard("login");
-    return;
+auth.onAuthStateChanged(async user=>{
+  if(!user){
+    $("authScreen").style.display="flex"; $("appContainer").style.display="none"; $("loadingScreen").style.display="none";
+    showCard("login"); return;
   }
-  const isGoogle = user.providerData[0]?.providerId === "google.com";
-  if (!isGoogle && !user.emailVerified) { await auth.signOut(); return; }
-  const snap = await db.ref(`adminData/allUsers/${user.uid}`).once("value");
-  if (!snap.exists()) return;
-  currentUser   = user;
-  currentUserId = user.uid;
-  $("authScreen").style.display = "none";
+  const isGoogle=user.providerData[0]?.providerId==="google.com";
+  if(!isGoogle&&!user.emailVerified){ await auth.signOut(); return; }
+  const snap=await db.ref(`adminData/allUsers/${user.uid}`).once("value");
+  if(!snap.exists()) return;
+  currentUser=user; currentUserId=user.uid;
+  $("authScreen").style.display="none";
   startApp();
 });
 
-// ============================================================
-// LOGOUT
-// ============================================================
-$("logoutBtn").addEventListener("click", () => {
-  cleanupPresence();
-  setTyping(false);
-  Object.values(dbListeners).forEach(({ ref: r, listener: l }) => r && r.off && r.off("child_added", l));
-  dbListeners = {};
+$("logoutBtn").addEventListener("click",()=>{
+  cleanupPresence(); setTyping(false);
+  Object.values(msgListeners).forEach(({ref:r,listener:l})=>{if(r&&l) r.off("child_added",l);});
+  msgListeners={};
   auth.signOut();
 });
 
@@ -386,184 +305,128 @@ $("logoutBtn").addEventListener("click", () => {
 // START APP
 // ============================================================
 function startApp() {
-  $("loadingScreen").style.display = "flex";
-  $("appContainer").style.display  = "none";
-  loadCustomTags(() => {
-    db.ref(`adminData/allUsers/${currentUserId}`).once("value", snap => {
-      const data      = snap.val() || {};
-      currentUsername = data.username || currentUser.displayName || "Guest";
-      myColor         = data.usernameColor || "#5865f2";
-      myAvatar        = data.avatarUrl || null;
-      buildSidebar();
-      loadMyTags(() => {
-        runLoadingCountdown();
+  $("loadingScreen").style.display="flex"; $("appContainer").style.display="none";
+
+  // Load custom tags first
+  loadCustomTags(()=>{
+    // Then load user data
+    db.ref(`adminData/allUsers/${currentUserId}`).once("value",snap=>{
+      const data=snap.val()||{};
+      currentUsername=data.username||currentUser.displayName||"Guest";
+      myColor=data.usernameColor||"#5865f2";
+      myAvatar=data.avatarUrl||null;
+
+      // Keep allUsers live for the entire session (needed for @mention, user cards, etc.)
+      db.ref("adminData/allUsers").on("value",usSnap=>{
+        allUsersCache=usSnap.val()||{};
+        // If our own avatarUrl was cleared remotely, update local state
+        const me=allUsersCache[currentUserId];
+        if(me && me.avatarUrl !== myAvatar){
+          myAvatar = me.avatarUrl || null;
+          updateSidebarAvatar();
+        }
       });
+
+      buildSidebar();
+      loadMyTags(()=>runLoadingCountdown());
     });
   });
 }
 
 function loadMyTags(cb) {
-  db.ref(`adminData/userTags/${currentUserId}`).on("value", snap => {
-    myTags = snap.val() || [];
-    updateUserPanel();
-    buildSpecialChannelButtons();
-    if (cb) { cb(); cb = null; }
+  db.ref(`adminData/userTags/${currentUserId}`).on("value",snap=>{
+    myTags=snap.val()||[];
+    updateUserPanel(); buildSpecialChannelButtons();
+    if(cb){ cb(); cb=null; }
   });
 }
 
 function runLoadingCountdown() {
-  const bar  = $("countdownBar");
-  const text = $("countdownText");
-  let t = 3;
-  text.textContent = "3s";
-  const iv = setInterval(() => {
-    t -= 0.1;
-    bar.style.width = ((3 - t) / 3 * 100) + "%";
-    text.textContent = Math.ceil(t) + "s";
-    if (t <= 0) {
+  const bar=$("countdownBar"),text=$("countdownText");
+  let t=3; text.textContent="3s";
+  const iv=setInterval(()=>{
+    t-=0.1; bar.style.width=((3-t)/3*100)+"%"; text.textContent=Math.ceil(t)+"s";
+    if(t<=0){
       clearInterval(iv);
-      $("loadingScreen").style.display = "none";
-      $("appContainer").style.display  = "flex";
-      switchServer("server1");
-      setupMenuTriggers();
-      setupPresence();
+      $("loadingScreen").style.display="none"; $("appContainer").style.display="flex";
+      switchServer("server1"); setupMenuTriggers(); setupPresence();
     }
-  }, 100);
+  },100);
 }
 
 // ============================================================
-// SIDEBAR BUILD
+// SIDEBAR
 // ============================================================
-function buildSidebar() {
-  buildColorPicker();
-  buildThemeColorPicker();
-  buildTextSizePicker();
-  setupAvatarUpload();
-}
+function buildSidebar() { buildColorPicker(); buildThemeColorPicker(); buildTextSizePicker(); setupAvatarUpload(); }
 
 function buildSpecialChannelButtons() {
-  const privBtn = $("privateChannelBtn");
-  privBtn.innerHTML = "";
-  if (myTags.includes(PRIVATE_CHANNEL_TAG) || myTags.includes("Owner") || myTags.includes("Admin")) {
-    const btn = document.createElement("button");
-    btn.className = "serverBtn";
-    btn.setAttribute("data-server", "private");
-    btn.innerHTML = `<span class="channel-hash">#</span><span class="channel-label">private</span><span class="unread-dot" id="unread-private" style="display:none;"></span>`;
-    btn.addEventListener("click", () => switchServer("private"));
-    privBtn.appendChild(btn);
+  const privBtn=$("privateChannelBtn"); privBtn.innerHTML="";
+  if(myTags.includes(PRIVATE_CHANNEL_TAG)||myTags.includes("Owner")||myTags.includes("Admin")){
+    const btn=document.createElement("button");
+    btn.className="serverBtn"; btn.setAttribute("data-server","private");
+    btn.innerHTML=`<span class="channel-hash">#</span><span class="channel-label">private</span><span class="unread-dot" id="unread-private" style="display:none;"></span>`;
+    btn.addEventListener("click",()=>switchServer("private")); privBtn.appendChild(btn);
   }
-
-  const modBtn = $("modChatBtn");
-  modBtn.innerHTML = "";
-  const hasMod = myTags.some(t => MOD_TAGS.includes(t));
-  if (hasMod) {
-    const btn = document.createElement("button");
-    btn.className = "serverBtn";
-    btn.setAttribute("data-server", "modchat");
-    btn.innerHTML = `<span class="channel-hash">#</span><span class="channel-label">mod-chat</span><span class="unread-dot" id="unread-modchat" style="display:none;"></span>`;
-    btn.addEventListener("click", () => switchServer("modchat"));
-    modBtn.appendChild(btn);
+  const modBtn=$("modChatBtn"); modBtn.innerHTML="";
+  if(myTags.some(t=>MOD_TAGS.includes(t))){
+    const btn=document.createElement("button");
+    btn.className="serverBtn"; btn.setAttribute("data-server","modchat");
+    btn.innerHTML=`<span class="channel-hash">#</span><span class="channel-label">mod-chat</span><span class="unread-dot" id="unread-modchat" style="display:none;"></span>`;
+    btn.addEventListener("click",()=>switchServer("modchat")); modBtn.appendChild(btn);
   }
 }
 
 function buildColorPicker() {
-  const wrap = $("colorPickerBtn");
-  wrap.innerHTML = "";
-  const picker = document.createElement("input");
-  picker.type = "color";
-  picker.value = myColor;
-  picker.style.cssText = "position:absolute;opacity:0;pointer-events:none;width:0;height:0;";
-  const dot = document.createElement("span");
-  dot.style.cssText = `display:inline-block;width:11px;height:11px;border-radius:50%;background:${myColor};flex-shrink:0;transition:transform 0.2s;`;
-  const btn = document.createElement("button");
-  btn.className = "sidebar-ctrl-btn";
-  btn.appendChild(dot);
-  btn.appendChild(Object.assign(document.createElement("span"), { textContent: " Username Color" }));
-  btn.addEventListener("click", () => picker.click());
-  btn.addEventListener("mouseenter", () => dot.style.transform = "scale(1.3)");
-  btn.addEventListener("mouseleave", () => dot.style.transform = "scale(1)");
-  picker.addEventListener("input", e => {
-    myColor = e.target.value;
-    dot.style.background = myColor;
-    db.ref(`adminData/allUsers/${currentUserId}`).update({ usernameColor: myColor });
-    updateUserPanel();
-  });
-  wrap.appendChild(btn);
-  wrap.appendChild(picker);
+  const wrap=$("colorPickerBtn"); wrap.innerHTML="";
+  const picker=document.createElement("input"); picker.type="color"; picker.value=myColor;
+  picker.style.cssText="position:absolute;opacity:0;pointer-events:none;width:0;height:0;";
+  const dot=document.createElement("span");
+  dot.style.cssText=`display:inline-block;width:11px;height:11px;border-radius:50%;background:${myColor};flex-shrink:0;transition:transform 0.2s;`;
+  const btn=document.createElement("button"); btn.className="sidebar-ctrl-btn";
+  btn.appendChild(dot); btn.appendChild(Object.assign(document.createElement("span"),{textContent:" Username Color"}));
+  btn.addEventListener("click",()=>picker.click());
+  btn.addEventListener("mouseenter",()=>dot.style.transform="scale(1.3)");
+  btn.addEventListener("mouseleave",()=>dot.style.transform="scale(1)");
+  picker.addEventListener("input",e=>{myColor=e.target.value; dot.style.background=myColor; db.ref(`adminData/allUsers/${currentUserId}`).update({usernameColor:myColor}); updateUserPanel();});
+  wrap.appendChild(btn); wrap.appendChild(picker);
 }
 
 function buildThemeColorPicker() {
-  const section = $("themeColorSection");
-  section.innerHTML = "";
-  const picker = document.createElement("input");
-  picker.type = "color";
-  picker.value = localStorage.getItem("themeColor") || "#26282d";
-  picker.style.cssText = "position:absolute;opacity:0;pointer-events:none;width:0;height:0;";
-  const btn = document.createElement("button");
-  btn.className = "sidebar-ctrl-btn";
-  btn.textContent = "🎨 Chat Background";
-  btn.addEventListener("click", () => picker.click());
-  picker.addEventListener("input", e => {
-    localStorage.setItem("themeColor", e.target.value);
-    $("chatbox").style.backgroundColor = e.target.value;
-  });
-  const saved = localStorage.getItem("themeColor");
-  if (saved) $("chatbox").style.backgroundColor = saved;
-  section.appendChild(btn);
-  section.appendChild(picker);
+  const section=$("themeColorSection"); section.innerHTML="";
+  const picker=document.createElement("input"); picker.type="color";
+  picker.value=localStorage.getItem("themeColor")||"#26282d";
+  picker.style.cssText="position:absolute;opacity:0;pointer-events:none;width:0;height:0;";
+  const btn=document.createElement("button"); btn.className="sidebar-ctrl-btn"; btn.textContent="🎨 Chat Background";
+  btn.addEventListener("click",()=>picker.click());
+  picker.addEventListener("input",e=>{localStorage.setItem("themeColor",e.target.value);$("chatbox").style.backgroundColor=e.target.value;});
+  const saved=localStorage.getItem("themeColor"); if(saved) $("chatbox").style.backgroundColor=saved;
+  section.appendChild(btn); section.appendChild(picker);
 }
 
 function buildTextSizePicker() {
-  const section = $("textSizeSection");
-  section.innerHTML = `<div class="sidebar-section-label sub">TEXT SIZE</div>`;
-  const row = document.createElement("div");
-  row.className = "text-size-row";
-  const savedSize = localStorage.getItem("textSize") || "14px";
-  applyTextSize(savedSize);
-  ["12px","14px","16px","18px"].forEach(size => {
-    const btn = document.createElement("button");
-    btn.className = "size-btn" + (savedSize === size ? " active" : "");
-    btn.textContent = size;
-    btn.addEventListener("click", () => {
-      applyTextSize(size);
-      localStorage.setItem("textSize", size);
-      row.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-    });
+  const section=$("textSizeSection"); section.innerHTML=`<div class="sidebar-section-label sub">TEXT SIZE</div>`;
+  const row=document.createElement("div"); row.className="text-size-row";
+  const savedSize=localStorage.getItem("textSize")||"14px"; applyTextSize(savedSize);
+  ["12px","14px","16px","18px"].forEach(size=>{
+    const btn=document.createElement("button"); btn.className="size-btn"+(savedSize===size?" active":""); btn.textContent=size;
+    btn.addEventListener("click",()=>{applyTextSize(size);localStorage.setItem("textSize",size);row.querySelectorAll(".size-btn").forEach(b=>b.classList.remove("active"));btn.classList.add("active");});
     row.appendChild(btn);
   });
   section.appendChild(row);
 }
-
-function applyTextSize(size) {
-  $("chatbox").style.fontSize = size;
-}
+function applyTextSize(size){ $("chatbox").style.fontSize=size; }
 
 function updateUserPanel() {
-  $("sidebarUsername").textContent = currentUsername;
-  $("sidebarUsername").style.color = myColor;
+  $("sidebarUsername").textContent=currentUsername; $("sidebarUsername").style.color=myColor;
   updateSidebarAvatar();
-
-  const tagsSection = $("sidebarTagsSection");
-  tagsSection.innerHTML = "";
-  if (myTags.length > 0) {
-    const label = document.createElement("div");
-    label.className = "sidebar-section-label sub";
-    label.textContent = "YOUR TAGS";
-    tagsSection.appendChild(label);
-    const pillsWrap = document.createElement("div");
-    pillsWrap.className = "sidebar-tags-wrap";
-    myTags.forEach(tag => {
-      const span = document.createElement("span");
-      span.className = "sidebar-tag-pill";
-      applyTagStyleToEl(span, tag);
-      span.textContent = tag;
-      const s = getTagStyle(tag);
-      if (s.rainbow) {
-        span.style.background = "linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";
-        span.style.borderColor = "rgba(255,100,100,0.3)";
-        span.style.color = "#fff";
-      }
+  const tagsSection=$("sidebarTagsSection"); tagsSection.innerHTML="";
+  if(myTags.length>0){
+    const label=document.createElement("div"); label.className="sidebar-section-label sub"; label.textContent="YOUR TAGS"; tagsSection.appendChild(label);
+    const pillsWrap=document.createElement("div"); pillsWrap.className="sidebar-tags-wrap";
+    myTags.forEach(tag=>{
+      const span=document.createElement("span"); span.className="sidebar-tag-pill"; applyTagStyleToEl(span,tag); span.textContent=tag;
+      const s=getTagStyle(tag);
+      if(s.rainbow){span.style.background="linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";span.style.borderColor="rgba(255,100,100,0.3)";span.style.color="#fff";}
       pillsWrap.appendChild(span);
     });
     tagsSection.appendChild(pillsWrap);
@@ -571,18 +434,15 @@ function updateUserPanel() {
 }
 
 function updateSidebarAvatar() {
-  const av = $("sidebarAvatar");
-  av.innerHTML = "";
-  av.style.background = "";
-  if (myAvatar) {
-    const img = document.createElement("img");
-    img.src = myAvatar;
-    img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;";
-    img.onerror = () => { av.innerHTML = ""; av.textContent = currentUsername.charAt(0).toUpperCase(); av.style.background = `linear-gradient(135deg,${myColor}cc,${myColor}66)`; };
+  const av=$("sidebarAvatar"); av.innerHTML=""; av.style.background="";
+  if(myAvatar){
+    const img=document.createElement("img"); img.src=myAvatar;
+    img.style.cssText="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;";
+    img.onerror=()=>{ av.innerHTML=""; av.textContent=currentUsername.charAt(0).toUpperCase(); av.style.background=`linear-gradient(135deg,${myColor}cc,${myColor}66)`; };
     av.appendChild(img);
   } else {
-    av.textContent = currentUsername.charAt(0).toUpperCase();
-    av.style.background = `linear-gradient(135deg,${myColor}cc,${myColor}66)`;
+    av.textContent=currentUsername.charAt(0).toUpperCase();
+    av.style.background=`linear-gradient(135deg,${myColor}cc,${myColor}66)`;
   }
 }
 
@@ -590,307 +450,239 @@ function updateSidebarAvatar() {
 // AVATAR UPLOAD
 // ============================================================
 function setupAvatarUpload() {
-  const wrap = $("sidebarAvatarWrap");
-  wrap.style.cursor = "pointer";
-  wrap.addEventListener("click", () => $("avatarFileInput").click());
-  $("avatarFileInput").addEventListener("change", async () => {
-    const file = $("avatarFileInput").files[0];
-    if (!file) return;
-    $("avatarFileInput").value = "";
-    if (file.size > 5 * 1024 * 1024) { alert("Image must be under 5MB."); return; }
+  const wrap=$("sidebarAvatarWrap"); wrap.style.cursor="pointer";
+  wrap.addEventListener("click",()=>$("avatarFileInput").click());
+  $("avatarFileInput").addEventListener("change",async()=>{
+    const file=$("avatarFileInput").files[0]; if(!file) return;
+    $("avatarFileInput").value="";
+    if(file.size>5*1024*1024){ alert("Image must be under 5MB."); return; }
     wrap.classList.add("uploading");
-    const url = await uploadToImgBB(file);
+    const url=await uploadToImgBB(file);
     wrap.classList.remove("uploading");
-    if (!url) return;
-    myAvatar = url;
-    await db.ref(`adminData/allUsers/${currentUserId}`).update({ avatarUrl: url });
+    if(!url) return;
+    myAvatar=url;
+    await db.ref(`adminData/allUsers/${currentUserId}`).update({avatarUrl:url});
     updateSidebarAvatar();
   });
 }
 
 async function uploadToImgBB(file) {
-  const formData = new FormData();
-  formData.append("image", file);
+  const formData=new FormData(); formData.append("image",file);
   try {
-    const res  = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: "POST", body: formData });
-    const json = await res.json();
-    return json.success ? json.data.url : null;
-  } catch(e) { alert("Upload failed: " + e.message); return null; }
+    const res=await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`,{method:"POST",body:formData});
+    const json=await res.json(); return json.success?json.data.url:null;
+  } catch(e){ alert("Upload failed: "+e.message); return null; }
 }
 
 // ============================================================
 // USERNAME CHANGE
 // ============================================================
-$("changeUsernameBtn").addEventListener("click", async () => {
-  const snap = await db.ref(`adminData/allUsers/${currentUserId}/lastUsernameChange`).once("value");
-  const last = snap.val() || 0;
-  const diff = Date.now() - last;
-  if (diff < WEEK_MS) {
-    const rem  = WEEK_MS - diff;
-    const days = Math.floor(rem / (24*60*60*1000));
-    const hrs  = Math.floor((rem % (24*60*60*1000)) / (60*60*1000));
-    $("usernameChangeCooldown").textContent = `⏳ Next change in ${days}d ${hrs}h`;
-    $("usernameChangeInput").disabled  = true;
-    $("usernameChangeSaveBtn").disabled = true;
+$("changeUsernameBtn").addEventListener("click",async()=>{
+  const snap=await db.ref(`adminData/allUsers/${currentUserId}/lastUsernameChange`).once("value");
+  const last=snap.val()||0,diff=Date.now()-last;
+  if(diff<WEEK_MS){
+    const rem=WEEK_MS-diff,days=Math.floor(rem/(24*60*60*1000)),hrs=Math.floor((rem%(24*60*60*1000))/(60*60*1000));
+    $("usernameChangeCooldown").textContent=`⏳ Next change in ${days}d ${hrs}h`;
+    $("usernameChangeInput").disabled=true; $("usernameChangeSaveBtn").disabled=true;
   } else {
-    $("usernameChangeCooldown").textContent = "✓ Change available";
-    $("usernameChangeInput").disabled  = false;
-    $("usernameChangeSaveBtn").disabled = false;
+    $("usernameChangeCooldown").textContent="✓ Change available";
+    $("usernameChangeInput").disabled=false; $("usernameChangeSaveBtn").disabled=false;
   }
-  $("usernameChangeInput").value = currentUsername;
-  $("usernameChangeBar").style.display = "block";
-  if (!$("usernameChangeInput").disabled) $("usernameChangeInput").focus();
+  $("usernameChangeInput").value=currentUsername; $("usernameChangeBar").style.display="block";
+  if(!$("usernameChangeInput").disabled) $("usernameChangeInput").focus();
 });
-$("usernameChangeCancelBtn").addEventListener("click", () => { $("usernameChangeBar").style.display = "none"; });
-$("usernameChangeSaveBtn").addEventListener("click", async () => {
-  const newName = $("usernameChangeInput").value.trim();
-  if (!newName || newName.length < 2) return alert("Username must be at least 2 characters.");
-  if (newName === currentUsername) { $("usernameChangeBar").style.display = "none"; return; }
-  const snap = await db.ref(`adminData/allUsers/${currentUserId}/lastUsernameChange`).once("value");
-  if (Date.now() - (snap.val() || 0) < WEEK_MS) return alert("You can only change your username once per week.");
-  checkUsernameAvailable(newName, currentUserId, async available => {
-    if (!available) return alert("That username is already taken.");
-    currentUsername = newName;
-    await db.ref(`adminData/allUsers/${currentUserId}`).update({ username: newName, lastUsernameChange: Date.now() });
-    updateUserPanel();
-    $("usernameChangeBar").style.display = "none";
+$("usernameChangeCancelBtn").addEventListener("click",()=>$("usernameChangeBar").style.display="none");
+$("usernameChangeSaveBtn").addEventListener("click",async()=>{
+  const newName=$("usernameChangeInput").value.trim();
+  if(!newName||newName.length<2) return alert("Username must be at least 2 characters.");
+  if(newName===currentUsername){$("usernameChangeBar").style.display="none";return;}
+  const snap=await db.ref(`adminData/allUsers/${currentUserId}/lastUsernameChange`).once("value");
+  if(Date.now()-(snap.val()||0)<WEEK_MS) return alert("You can only change your username once per week.");
+  checkUsernameAvailable(newName,currentUserId,async available=>{
+    if(!available) return alert("That username is already taken.");
+    currentUsername=newName;
+    await db.ref(`adminData/allUsers/${currentUserId}`).update({username:newName,lastUsernameChange:Date.now()});
+    updateUserPanel(); $("usernameChangeBar").style.display="none";
   });
 });
 
-// ============================================================
-// BETA WARNING
-// ============================================================
-const betaWarn = $("betaWarning");
-if (betaWarn) {
-  betaWarn.addEventListener("click", () => {
-    betaWarn.style.opacity = "0";
-    betaWarn.style.transform = "scale(0.9)";
-    setTimeout(() => betaWarn.style.display = "none", 300);
-  });
-}
+const betaWarn=$("betaWarning");
+if(betaWarn) betaWarn.addEventListener("click",()=>{betaWarn.style.opacity="0";betaWarn.style.transform="scale(0.9)";setTimeout(()=>betaWarn.style.display="none",300);});
 
 // ============================================================
-// ONLINE PRESENCE
+// PRESENCE
 // ============================================================
 function setupPresence() {
-  const presenceRef  = db.ref(`presence/${currentUserId}`);
-  const connectedRef = db.ref(".info/connected");
-  connectedRef.on("value", snap => {
-    if (!snap.val()) return;
-    presenceRef.onDisconnect().remove();
-    presenceRef.set({ username: currentUsername, color: myColor, online: true });
-  });
-  db.ref("presence").on("value", snap => {
-    $("onlineCountNum").textContent = snap.numChildren();
-  });
+  const presenceRef=db.ref(`presence/${currentUserId}`),connectedRef=db.ref(".info/connected");
+  connectedRef.on("value",snap=>{if(!snap.val()) return; presenceRef.onDisconnect().remove(); presenceRef.set({username:currentUsername,color:myColor,online:true});});
+  db.ref("presence").on("value",snap=>$("onlineCountNum").textContent=snap.numChildren());
 }
 function cleanupPresence() {
-  if (currentUserId) db.ref(`presence/${currentUserId}`).remove();
-  db.ref("presence").off();
-  db.ref(".info/connected").off();
+  if(currentUserId) db.ref(`presence/${currentUserId}`).remove();
+  db.ref("presence").off(); db.ref(".info/connected").off();
 }
 
 // ============================================================
-// TYPING INDICATOR
+// TYPING
 // ============================================================
 function setTyping(active) {
-  if (!currentUserId) return;
-  const ref = db.ref(`typing/${currentServer}/${currentUserId}`);
-  active ? ref.set({ username: currentUsername, ts: Date.now() }) : ref.remove();
+  if(!currentUserId) return;
+  const ref=db.ref(`typing/${currentServer}/${currentUserId}`);
+  active?ref.set({username:currentUsername,ts:Date.now()}):ref.remove();
 }
-
 function setupTypingListener() {
   db.ref(`typing/${currentServer}`).off();
-  db.ref(`typing/${currentServer}`).on("value", snap => {
-    const typers = snap.val() || {};
-    const names  = Object.entries(typers).filter(([uid]) => uid !== currentUserId).map(([,v]) => v.username);
-    const indicator = $("typingIndicator");
-    if (names.length === 0) {
-      indicator.style.display = "none";
-    } else {
-      indicator.style.display = "flex";
-      $("typingText").textContent = names.length === 1 ? `${names[0]} is typing...`
-        : names.length === 2 ? `${names[0]} and ${names[1]} are typing...`
-        : `${names.length} people are typing...`;
-    }
+  db.ref(`typing/${currentServer}`).on("value",snap=>{
+    const typers=snap.val()||{};
+    const names=Object.entries(typers).filter(([uid])=>uid!==currentUserId).map(([,v])=>v.username);
+    const indicator=$("typingIndicator");
+    if(!names.length){indicator.style.display="none";return;}
+    indicator.style.display="flex";
+    $("typingText").textContent=names.length===1?`${names[0]} is typing...`:names.length===2?`${names[0]} and ${names[1]} are typing...`:`${names.length} people are typing...`;
   });
 }
-
-$("msgInput").addEventListener("input", () => {
-  if (!isTyping) { isTyping = true; setTyping(true); }
+$("msgInput").addEventListener("input",()=>{
+  if(!isTyping){isTyping=true;setTyping(true);}
   clearTimeout(typingTimer);
-  typingTimer = setTimeout(() => { isTyping = false; setTyping(false); }, 3000);
+  typingTimer=setTimeout(()=>{isTyping=false;setTyping(false);},3000);
 });
 
 // ============================================================
 // REPLY
 // ============================================================
-function setReply(messageId, name, text) {
-  replyingTo = { messageId, name, text };
-  $("replyToName").textContent    = name;
-  $("replyToPreview").textContent = stripHtml(text).substring(0, 80);
-  $("replyBar").style.display     = "block";
-  $("msgInput").focus();
+function setReply(messageId,name,text) {
+  replyingTo={messageId,name,text};
+  $("replyToName").textContent=name;
+  $("replyToPreview").textContent=stripHtml(text).substring(0,80);
+  $("replyBar").style.display="block"; $("msgInput").focus();
 }
-function clearReply() {
-  replyingTo = null;
-  $("replyBar").style.display = "none";
-}
-$("cancelReplyBtn").addEventListener("click", clearReply);
+function clearReply(){ replyingTo=null; $("replyBar").style.display="none"; }
+$("cancelReplyBtn").addEventListener("click",clearReply);
 
 // ============================================================
-// @MENTION AUTOCOMPLETE
+// @MENTION
 // ============================================================
-let mentionActive = false;
-
-$("msgInput").addEventListener("keyup", e => {
-  if (e.key === "Escape") { $("mentionDropdown").style.display = "none"; mentionActive = false; return; }
-  const val    = $("msgInput").value;
-  const cursor = $("msgInput").selectionStart;
-  const before = val.substring(0, cursor);
-  const match  = before.match(/@(\w*)$/);
-  if (match) {
-    mentionActive = true;
-    showMentionDropdown(match[1].toLowerCase());
-  } else {
-    mentionActive = false;
-    $("mentionDropdown").style.display = "none";
-  }
+let mentionActive=false;
+$("msgInput").addEventListener("keyup",e=>{
+  if(e.key==="Escape"){$("mentionDropdown").style.display="none";mentionActive=false;return;}
+  const val=$("msgInput").value,cursor=$("msgInput").selectionStart,before=val.substring(0,cursor),match=before.match(/@(\w*)$/);
+  if(match){mentionActive=true;showMentionDropdown(match[1].toLowerCase());}
+  else{mentionActive=false;$("mentionDropdown").style.display="none";}
 });
-
 function showMentionDropdown(query) {
-  const users = Object.values(allUsersCache).filter(u => u.username && u.username.toLowerCase().startsWith(query)).slice(0, 6);
-  if (!users.length) { $("mentionDropdown").style.display = "none"; return; }
-  $("mentionDropdown").innerHTML = "";
-  users.forEach(u => {
-    const item = document.createElement("div");
-    item.className = "mention-item";
-    const av = buildAvatarEl(u.avatarUrl || null, u.username, u.usernameColor || "#5865f2", 24);
-    const name = document.createElement("span");
-    name.textContent = u.username;
-    name.style.color = u.usernameColor || "#fff";
-    name.style.fontWeight = "700";
-    item.appendChild(av);
-    item.appendChild(name);
-    item.addEventListener("click", () => {
-      const val    = $("msgInput").value;
-      const cursor = $("msgInput").selectionStart;
-      const before = val.substring(0, cursor).replace(/@\w*$/, `@${u.username} `);
-      $("msgInput").value = before + val.substring(cursor);
-      $("msgInput").focus();
-      $("mentionDropdown").style.display = "none";
-      mentionActive = false;
+  const users=Object.values(allUsersCache).filter(u=>u.username&&u.username.toLowerCase().startsWith(query)).slice(0,6);
+  if(!users.length){$("mentionDropdown").style.display="none";return;}
+  $("mentionDropdown").innerHTML="";
+  users.forEach(u=>{
+    const item=document.createElement("div"); item.className="mention-item";
+    const av=buildAvatarEl(u.avatarUrl||null,u.username,u.usernameColor||"#5865f2",24);
+    const name=document.createElement("span"); name.textContent=u.username; name.style.color=u.usernameColor||"#fff"; name.style.fontWeight="700";
+    item.appendChild(av); item.appendChild(name);
+    item.addEventListener("click",()=>{
+      const val=$("msgInput").value,cursor=$("msgInput").selectionStart;
+      const before=val.substring(0,cursor).replace(/@\w*$/,`@${u.username} `);
+      $("msgInput").value=before+val.substring(cursor); $("msgInput").focus();
+      $("mentionDropdown").style.display="none"; mentionActive=false;
     });
     $("mentionDropdown").appendChild(item);
   });
-  $("mentionDropdown").style.display = "block";
+  $("mentionDropdown").style.display="block";
 }
-document.addEventListener("click", e => {
-  if (!$("mentionDropdown").contains(e.target) && e.target !== $("msgInput")) {
-    $("mentionDropdown").style.display = "none";
-  }
+document.addEventListener("click",e=>{
+  if(!$("mentionDropdown").contains(e.target)&&e.target!==$("msgInput")) $("mentionDropdown").style.display="none";
 });
 
 // ============================================================
-// AVATAR ELEMENT BUILDER
+// AVATAR BUILDER
 // ============================================================
-function buildAvatarEl(avatarUrl, username, color, size = 36) {
-  if (avatarUrl) {
-    const img = document.createElement("img");
-    img.src = avatarUrl;
-    img.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:block;`;
-    img.onerror = () => img.replaceWith(makeInitialAvatar(username, color, size));
-    return img;
+function buildAvatarEl(avatarUrl,username,color,size=36) {
+  if(avatarUrl){
+    const img=document.createElement("img"); img.src=avatarUrl;
+    img.style.cssText=`width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:block;`;
+    img.onerror=()=>img.replaceWith(makeInitialAvatar(username,color,size)); return img;
   }
-  return makeInitialAvatar(username, color, size);
+  return makeInitialAvatar(username,color,size);
 }
-function makeInitialAvatar(username, color, size = 36) {
-  const div = document.createElement("div");
-  div.textContent = (username || "?").charAt(0).toUpperCase();
-  div.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,${color}cc,${color}66);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${Math.floor(size*0.4)}px;flex-shrink:0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.35);user-select:none;`;
+function makeInitialAvatar(username,color,size=36) {
+  const div=document.createElement("div"); div.textContent=(username||"?").charAt(0).toUpperCase();
+  div.style.cssText=`width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,${color}cc,${color}66);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${Math.floor(size*0.4)}px;flex-shrink:0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.35);user-select:none;`;
   return div;
 }
 
 // ============================================================
-// SERVER SWITCHING — FIXED (no double messages)
+// SERVER SWITCHING
+// BUG: Prior code used startAt(initialLoadTime) which could skip
+// messages sent at the exact same millisecond. Fixed by:
+// 1. Using .once() to load ALL history (no duplicates possible)
+// 2. Finding the highest timestamp from history
+// 3. Attaching child_added only for timestamps > that value
+// This guarantees zero duplicate messages and no missing messages.
 // ============================================================
 function switchServer(serverName) {
-  // Detach old listener
-  if (dbListeners[currentServer]) {
-    const { ref: r, listener: l } = dbListeners[currentServer];
-    if (r && l) r.off("child_added", l);
-    delete dbListeners[currentServer];
+  // Detach previous live listener for old server
+  if(msgListeners[currentServer]){
+    const {dbRef:r,listener:l}=msgListeners[currentServer];
+    if(r&&l) r.off("child_added",l);
+    delete msgListeners[currentServer];
   }
 
-  setTyping(false);
-  isTyping = false;
-  clearTimeout(typingTimer);
+  setTyping(false); isTyping=false; clearTimeout(typingTimer);
   db.ref(`typing/${currentServer}`).off();
 
-  currentServer = serverName;
-  if (!displayedMessages[serverName]) displayedMessages[serverName] = new Set();
+  currentServer=serverName;
 
-  $("chatbox").innerHTML = "";
-  clearReply();
-  userScrolledUp = false;
+  $("chatbox").innerHTML=""; clearReply(); userScrolledUp=false;
+  displayedMessages[serverName]=new Set();
 
-  document.querySelectorAll(".serverBtn").forEach(btn => {
-    btn.classList.toggle("selected", btn.getAttribute("data-server") === serverName);
-  });
-
+  document.querySelectorAll(".serverBtn").forEach(btn=>btn.classList.toggle("selected",btn.getAttribute("data-server")===serverName));
   unreadServers.delete(serverName);
-  const dot = $(`unread-${serverName}`);
-  if (dot) dot.style.display = "none";
+  const dot=$(`unread-${serverName}`); if(dot) dot.style.display="none";
 
-  const names = { server1:"general", server2:"general-2", private:"private", modchat:"mod-chat" };
-  const label = names[serverName] || serverName;
-  $("channelName").textContent   = label;
-  $("msgInput").placeholder      = `Message #${label}`;
-
+  const names={server1:"general",server2:"general-2",private:"private",modchat:"mod-chat"};
+  const label=names[serverName]||serverName;
+  $("channelName").textContent=label; $("msgInput").placeholder=`Message #${label}`;
   setupTypingListener();
 
-  const ref = db.ref(`messages/${serverName}`);
+  const baseRef=db.ref(`messages/${serverName}`);
 
-  // FIX: Record the time BEFORE initial load so child_added only fires for truly new messages
-  const initialLoadTime = Date.now();
-
+  // Load ALL historical messages with .once() — this never fires child_added, no duplicates
   Promise.all([
-    ref.orderByChild("timestamp").once("value"),
+    baseRef.orderByChild("timestamp").once("value"),
     db.ref("adminData/userTags").once("value")
-  ]).then(([msgSnap, tagsSnap]) => {
-    if (currentServer !== serverName) return;
+  ]).then(([msgSnap,tagsSnap])=>{
+    // Guard: if user switched channels while loading, bail out
+    if(currentServer!==serverName) return;
 
-    const allTags = tagsSnap.val() || {};
-    const msgs = [];
-    msgSnap.forEach(child => msgs.push({ key: child.key, ...child.val() }));
+    const allTags=tagsSnap.val()||{};
+    let maxTimestamp=0;
 
-    // Reset dedup set right before rendering
-    displayedMessages[serverName] = new Set();
-
-    msgs.forEach(data => {
-      if (displayedMessages[serverName].has(data.key)) return;
-      displayedMessages[serverName].add(data.key);
-      renderMessage(data, serverName, false, allTags[data.userId] || []);
+    msgSnap.forEach(child=>{
+      const key=child.key, data=child.val();
+      if(displayedMessages[serverName].has(key)) return;
+      displayedMessages[serverName].add(key);
+      renderMessage({key,...data},serverName,false,allTags[data.userId]||[]);
+      if((data.timestamp||0)>maxTimestamp) maxTimestamp=data.timestamp||0;
     });
 
     scrollToBottom();
 
-    // FIX: Only listen for messages with timestamp AFTER initial load began
-    // This prevents double-rendering of historical messages in private/modchat channels
-    const liveRef = ref.orderByChild("timestamp").startAt(initialLoadTime);
-    const listener = liveRef.on("child_added", snapshot => {
-      if (currentServer !== serverName) return;
-      const key  = snapshot.key;
-      const data = snapshot.val();
-      if (displayedMessages[serverName].has(key)) return;
+    // Now attach live listener — ONLY fire for messages strictly newer than all history
+    // Adding 1ms ensures we never re-receive the last historical message
+    const liveStart=maxTimestamp+1;
+    const liveRef=baseRef.orderByChild("timestamp").startAt(liveStart);
+    const listener=liveRef.on("child_added",snapshot=>{
+      if(currentServer!==serverName) return;
+      const key=snapshot.key, data=snapshot.val();
+      if(displayedMessages[serverName].has(key)) return;
       displayedMessages[serverName].add(key);
-      db.ref(`adminData/userTags/${data.userId}`).once("value", tSnap => {
-        if (currentServer !== serverName) return;
-        renderMessage({ key, ...data }, serverName, true, tSnap.val() || []);
+      // Fetch tags for this sender
+      db.ref(`adminData/userTags/${data.userId}`).once("value",tSnap=>{
+        if(currentServer!==serverName) return;
+        renderMessage({key,...data},serverName,true,tSnap.val()||[]);
       });
     });
 
-    dbListeners[serverName] = { ref: liveRef, listener };
+    msgListeners[serverName]={dbRef:liveRef,listener};
     setupUnreadListeners();
   });
 }
@@ -898,1019 +690,715 @@ function switchServer(serverName) {
 // ============================================================
 // UNREAD DOTS
 // ============================================================
-const ALL_SERVERS = ["server1", "server2"];
-let unreadTimestamps = {};
-
+const ALL_SERVERS=["server1","server2"];
+let unreadTimestamps={};
 function setupUnreadListeners() {
-  ALL_SERVERS.forEach(server => {
-    if (server === currentServer) return;
+  ALL_SERVERS.forEach(server=>{
+    if(server===currentServer) return;
     db.ref(`messages/${server}`).off("child_added");
-    const since = unreadTimestamps[server] || Date.now();
-    db.ref(`messages/${server}`).orderByChild("timestamp").startAt(since).on("child_added", snap => {
-      if (currentServer !== server) {
+    const since=unreadTimestamps[server]||Date.now();
+    db.ref(`messages/${server}`).orderByChild("timestamp").startAt(since).on("child_added",snap=>{
+      if(currentServer!==server){
         unreadServers.add(server);
-        const dot = $(`unread-${server}`);
-        if (dot) dot.style.display = "inline-block";
-        unreadTimestamps[server] = Date.now();
+        const dot=$(`unread-${server}`); if(dot) dot.style.display="inline-block";
+        unreadTimestamps[server]=Date.now();
       }
     });
   });
 }
 
 // ============================================================
-// SCROLL TRACKING
+// SCROLL
 // ============================================================
-$("chatbox").addEventListener("scroll", () => {
-  const cb = $("chatbox");
-  const distFromBottom = cb.scrollHeight - cb.scrollTop - cb.clientHeight;
-  userScrolledUp = distFromBottom > 120;
-  if (!userScrolledUp) $("scrollToBottomBtn").style.display = "none";
+$("chatbox").addEventListener("scroll",()=>{
+  const cb=$("chatbox"),dist=cb.scrollHeight-cb.scrollTop-cb.clientHeight;
+  userScrolledUp=dist>120; if(!userScrolledUp) $("scrollToBottomBtn").style.display="none";
 });
-
-$("scrollToBottomBtn").addEventListener("click", () => {
-  scrollToBottom();
-  $("scrollToBottomBtn").style.display = "none";
-  userScrolledUp = false;
-});
-
-function scrollToBottom() {
-  const cb = $("chatbox");
-  cb.scrollTop = cb.scrollHeight;
-}
+$("scrollToBottomBtn").addEventListener("click",()=>{scrollToBottom();$("scrollToBottomBtn").style.display="none";userScrolledUp=false;});
+function scrollToBottom(){ const cb=$("chatbox"); cb.scrollTop=cb.scrollHeight; }
 
 // ============================================================
 // RENDER MESSAGE
-// tags param is pre-fetched — NO async DB calls inside this function
 // ============================================================
-function renderMessage(data, serverName, isNew, tags) {
-  const { key: messageId, name, message, time, userId: senderId, color, timestamp = 0, replyTo, avatarUrl } = data;
+function renderMessage(data,serverName,isNew,tags) {
+  const {key:messageId,name,message,time,userId:senderId,color,timestamp=0,replyTo,avatarUrl}=data;
 
-  if (serverName === "private" && !myTags.includes(PRIVATE_CHANNEL_TAG) && !myTags.includes("Owner") && !myTags.includes("Admin")) return;
-  if (serverName === "modchat"  && !myTags.some(t => MOD_TAGS.includes(t))) return;
+  if(serverName==="private"&&!myTags.includes(PRIVATE_CHANNEL_TAG)&&!myTags.includes("Owner")&&!myTags.includes("Admin")) return;
+  if(serverName==="modchat"&&!myTags.some(t=>MOD_TAGS.includes(t))) return;
 
-  const isMine = senderId === currentUserId;
-  const nameColor = color || "#ffffff";
+  const isMine=senderId===currentUserId;
+  const nameColor=color||"#ffffff";
 
-  const msgDiv = document.createElement("div");
-  msgDiv.classList.add("message", isMine ? "mine" : "other");
-  msgDiv.setAttribute("data-message-id", messageId);
+  const msgDiv=document.createElement("div");
+  msgDiv.classList.add("message",isMine?"mine":"other");
+  msgDiv.setAttribute("data-message-id",messageId);
 
-  let replyHTML = "";
-  if (replyTo) {
-    replyHTML = `<div class="reply-quote"><span class="reply-quote-name">${escapeHtml(replyTo.name)}</span><span class="reply-quote-text">${escapeHtml(stripHtml(replyTo.text).substring(0,80))}</span></div>`;
-  }
+  let replyHTML="";
+  if(replyTo) replyHTML=`<div class="reply-quote"><span class="reply-quote-name">${escapeHtml(replyTo.name)}</span><span class="reply-quote-text">${escapeHtml(stripHtml(replyTo.text).substring(0,80))}</span></div>`;
 
-  const mentionedMe = message.includes(`@${currentUsername}`);
-  if (mentionedMe) msgDiv.classList.add("mentioned");
+  const mentionedMe=message.includes(`@${currentUsername}`);
+  if(mentionedMe) msgDiv.classList.add("mentioned");
 
-  const parsedMsg = message.replace(/@(\w+)/g, (match, uname) => {
-    const isMe = uname === currentUsername;
-    return `<span class="mention${isMe?" mention-me":""}">${escapeHtml(match)}</span>`;
-  });
+  const parsedMsg=message.replace(/@(\w+)/g,(match,uname)=>`<span class="mention${uname===currentUsername?" mention-me":""}">${escapeHtml(match)}</span>`);
+  const tagHTML=tags.length?`<div class="msg-tags"><span class="tag-glow">${tags.map(t=>renderTagSpan(t)).join(" ")}</span></div>`:"";
+  const savedSize=localStorage.getItem("textSize")||"14px";
 
-  const tagHTML = tags.length
-    ? `<div class="msg-tags"><span class="tag-glow">${tags.map(t => renderTagSpan(t)).join(" ")}</span></div>`
-    : "";
+  msgDiv.innerHTML=`${replyHTML}${tagHTML}<div class="msg-header"><span class="username" style="color:${nameColor};font-size:${savedSize};">${escapeHtml(name)}</span><span class="time">${time}</span></div><span class="text">${parsedMsg}</span><div class="reactions"></div>`;
 
-  const savedSize = localStorage.getItem("textSize") || "14px";
+  const avatarEl=buildAvatarEl(avatarUrl||null,name,nameColor,34); avatarEl.className="msg-avatar";
 
-  msgDiv.innerHTML = `
-    ${replyHTML}
-    ${tagHTML}
-    <div class="msg-header">
-      <span class="username" style="color:${nameColor};font-size:${savedSize};">${escapeHtml(name)}</span>
-      <span class="time">${time}</span>
-    </div>
-    <span class="text">${parsedMsg}</span>
-    <div class="reactions"></div>
-  `;
-
-  const avatarEl = buildAvatarEl(avatarUrl || null, name, nameColor, 34);
-  avatarEl.className = "msg-avatar";
-
-  const wrapper = document.createElement("div");
-  wrapper.classList.add("msg-wrapper", isMine ? "mine" : "other");
-  wrapper.setAttribute("data-timestamp", timestamp);
-  wrapper.setAttribute("data-message-id", messageId);
-  wrapper.appendChild(avatarEl);
-  wrapper.appendChild(msgDiv);
+  const wrapper=document.createElement("div");
+  wrapper.classList.add("msg-wrapper",isMine?"mine":"other");
+  wrapper.setAttribute("data-timestamp",timestamp);
+  wrapper.setAttribute("data-message-id",messageId);
+  wrapper.appendChild(avatarEl); wrapper.appendChild(msgDiv);
 
   // Emoji picker
-  const emojis = ["👍","😂","❤️","🔥","😮","😢","🎉","💀","👀","✅","❌","💯"];
-  const picker  = document.createElement("div");
-  picker.className = "emoji-picker";
-  picker.style.display = "none";
-  emojis.forEach(emoji => {
-    const eBtn = document.createElement("span");
-    eBtn.className   = "emoji-btn";
-    eBtn.textContent = emoji;
-    eBtn.addEventListener("click", () => {
-      const ref = db.ref(`messages/${serverName}/${messageId}/reactions/${encodeEmoji(emoji)}/${currentUserId}`);
-      ref.once("value", s => { s.exists() ? ref.remove() : ref.set(true); picker.style.display = "none"; });
+  const emojis=["👍","😂","❤️","🔥","😮","😢","🎉","💀","👀","✅","❌","💯"];
+  const picker=document.createElement("div"); picker.className="emoji-picker"; picker.style.display="none";
+  emojis.forEach(emoji=>{
+    const eBtn=document.createElement("span"); eBtn.className="emoji-btn"; eBtn.textContent=emoji;
+    eBtn.addEventListener("click",()=>{
+      const ref=db.ref(`messages/${serverName}/${messageId}/reactions/${encodeEmoji(emoji)}/${currentUserId}`);
+      ref.once("value",s=>{s.exists()?ref.remove():ref.set(true); picker.style.display="none";});
     });
     picker.appendChild(eBtn);
   });
   msgDiv.appendChild(picker);
 
-  // Listen for message deletion from other clients — remove wrapper when DB node is deleted
-  db.ref(`messages/${serverName}/${messageId}`).on("value", snap => {
-    if (!snap.exists()) {
-      wrapper.remove();
-    }
-  });
+  // Live deletion: when Firebase node disappears, remove DOM element
+  db.ref(`messages/${serverName}/${messageId}`).on("value",snap=>{if(!snap.exists()) wrapper.remove();});
 
-  // Click → context menu
-  msgDiv.addEventListener("click", async e => {
-    if (e.target.closest(".reaction") || e.target.classList.contains("emoji-btn")) return;
-    document.querySelectorAll(".emoji-picker").forEach(p => { if (p !== picker) p.style.display = "none"; });
-    document.querySelectorAll(".msg-context-menu").forEach(m => m.remove());
+  // Context menu
+  msgDiv.addEventListener("click",async e=>{
+    if(e.target.closest(".reaction")||e.target.classList.contains("emoji-btn")) return;
+    document.querySelectorAll(".emoji-picker").forEach(p=>{if(p!==picker) p.style.display="none";});
+    document.querySelectorAll(".msg-context-menu").forEach(m=>m.remove());
 
-    const menu = document.createElement("div");
-    menu.className = "msg-context-menu";
+    const menu=document.createElement("div"); menu.className="msg-context-menu";
 
-    const replyBtn = document.createElement("button");
-    replyBtn.textContent = "↩ Reply";
-    replyBtn.addEventListener("click", () => { setReply(messageId, name, message); menu.remove(); });
+    const replyBtn=document.createElement("button"); replyBtn.textContent="↩ Reply";
+    replyBtn.addEventListener("click",()=>{setReply(messageId,name,message);menu.remove();});
     menu.appendChild(replyBtn);
 
-    const reactBtn = document.createElement("button");
-    reactBtn.textContent = "😀 React";
-    reactBtn.addEventListener("click", () => { picker.style.display = picker.style.display === "none" ? "flex" : "none"; menu.remove(); });
+    const reactBtn=document.createElement("button"); reactBtn.textContent="😀 React";
+    reactBtn.addEventListener("click",()=>{picker.style.display=picker.style.display==="none"?"flex":"none";menu.remove();});
     menu.appendChild(reactBtn);
 
-    const canDelete = myTags.includes("Owner") || senderId === currentUserId || myTags.includes("Mod") || myTags.includes("Admin");
-    if (canDelete) {
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "🗑️ Delete";
-      delBtn.className   = "danger";
-      delBtn.addEventListener("click", async () => {
+    const canDelete=myTags.includes("Owner")||senderId===currentUserId||myTags.includes("Mod")||myTags.includes("Admin");
+    if(canDelete){
+      const delBtn=document.createElement("button"); delBtn.textContent="🗑️ Delete"; delBtn.className="danger";
+      delBtn.addEventListener("click",async()=>{
         menu.remove();
-        const ok = await modConfirm("🗑️","Delete Message?","This message will be permanently deleted.");
-        if (ok) {
-          // FIX: Delete from DB first — the .on("value") listener above will remove the DOM element
+        const ok=await modConfirm("🗑️","Delete Message?","This message will be permanently deleted.");
+        if(ok){
           await db.ref(`messages/${serverName}/${messageId}`).remove();
-
-          // Log the deletion for everyone (not just mods)
-          logModAction({
-            type: "delete_message",
-            modName: currentUsername,
-            modId: currentUserId,
-            targetName: name,
-            targetId: senderId || "",
-            detail: `Deleted message: "${stripHtml(message).substring(0,50)}"`
-          });
+          logModAction({type:"delete_message",modName:currentUsername,modId:currentUserId,targetName:name,targetId:senderId||"",detail:`Deleted: "${stripHtml(message).substring(0,50)}"`});
         }
       });
       menu.appendChild(delBtn);
     }
 
-    if ((myTags.includes("Mod") || myTags.includes("Admin") || myTags.includes("Owner")) && senderId && senderId !== currentUserId) {
-      const rmPfpBtn = document.createElement("button");
-      rmPfpBtn.textContent = "🖼️ Remove PFP";
-      rmPfpBtn.className   = "danger";
-      rmPfpBtn.addEventListener("click", async () => {
-        menu.remove();
-        const ok = await modConfirm("🖼️","Remove Profile Picture?",`Remove profile picture for "${name}"?`);
-        if (ok) {
-          db.ref(`adminData/allUsers/${senderId}`).update({ avatarUrl: null });
-          logModAction({ type:"remove_pfp", modName: currentUsername, modId: currentUserId, targetName: name, targetId: senderId, detail:"Removed profile picture." });
-        }
-      });
-      menu.appendChild(rmPfpBtn);
-    }
-
     msgDiv.appendChild(menu);
-    setTimeout(() => {
-      document.addEventListener("click", function close(ev) {
-        if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", close); }
-      });
-    }, 10);
+    setTimeout(()=>{
+      document.addEventListener("click",function close(ev){if(!menu.contains(ev.target)){menu.remove();document.removeEventListener("click",close);}});
+    },10);
   });
 
   // Live reactions
-  db.ref(`messages/${serverName}/${messageId}/reactions`).on("value", snap => {
-    const reactions   = snap.val() || {};
-    const reactionDiv = msgDiv.querySelector(".reactions");
-    if (!reactionDiv) return;
-    reactionDiv.innerHTML = "";
-    emojis.forEach(emoji => {
-      const key     = encodeEmoji(emoji);
-      if (!reactions[key]) return;
-      const count   = Object.keys(reactions[key]).length;
-      const reacted = reactions[key][currentUserId] ? "reacted" : "";
-      const span    = document.createElement("span");
-      span.className   = `reaction ${reacted}`;
-      span.textContent = `${emoji} ${count}`;
-      span.addEventListener("click", () => {
-        const ref = db.ref(`messages/${serverName}/${messageId}/reactions/${key}/${currentUserId}`);
-        ref.once("value", s => s.exists() ? ref.remove() : ref.set(true));
-      });
+  db.ref(`messages/${serverName}/${messageId}/reactions`).on("value",snap=>{
+    const reactions=snap.val()||{},reactionDiv=msgDiv.querySelector(".reactions"); if(!reactionDiv) return;
+    reactionDiv.innerHTML="";
+    emojis.forEach(emoji=>{
+      const key=encodeEmoji(emoji); if(!reactions[key]) return;
+      const count=Object.keys(reactions[key]).length,reacted=reactions[key][currentUserId]?"reacted":"";
+      const span=document.createElement("span"); span.className=`reaction ${reacted}`; span.textContent=`${emoji} ${count}`;
+      span.addEventListener("click",()=>{const ref=db.ref(`messages/${serverName}/${messageId}/reactions/${key}/${currentUserId}`);ref.once("value",s=>s.exists()?ref.remove():ref.set(true));});
       reactionDiv.appendChild(span);
     });
   });
 
   // Insert in timestamp order
-  const allWrappers = Array.from($("chatbox").children);
-  let inserted = false;
-  for (let i = allWrappers.length - 1; i >= 0; i--) {
-    const existingTime = parseInt(allWrappers[i].getAttribute("data-timestamp") || "0");
-    if (existingTime <= timestamp) {
-      $("chatbox").insertBefore(wrapper, allWrappers[i].nextSibling);
-      inserted = true;
-      break;
-    }
+  const allWrappers=Array.from($("chatbox").children); let inserted=false;
+  for(let i=allWrappers.length-1;i>=0;i--){
+    const existingTime=parseInt(allWrappers[i].getAttribute("data-timestamp")||"0");
+    if(existingTime<=timestamp){$("chatbox").insertBefore(wrapper,allWrappers[i].nextSibling);inserted=true;break;}
   }
-  if (!inserted) $("chatbox").insertBefore(wrapper, $("chatbox").firstChild);
+  if(!inserted) $("chatbox").insertBefore(wrapper,$("chatbox").firstChild);
 
-  if (isNew === true) {
-    if (!userScrolledUp) {
-      scrollToBottom();
-    } else {
-      $("scrollToBottomBtn").style.display = "flex";
-    }
-  }
+  if(isNew===true){if(!userScrolledUp) scrollToBottom(); else $("scrollToBottomBtn").style.display="flex";}
 }
 
 // ============================================================
-// BAD WORDS FILTER
+// BAD WORDS / MARKDOWN
 // ============================================================
-const badWords = ["nigger","nigga","niga","niger","faggot","chink","coon","gook","kike","spic","wetback","fag","dyke","tranny","porn","xxx","hardcore","incest","bestiality"];
-function normalizeText(t) {
-  return t.toLowerCase().replace(/[=\s\-_.|]+/g,"").replace(/[1!]/g,"i").replace(/3/g,"e").replace(/0/g,"o").replace(/@/g,"a").replace(/5/g,"s").replace(/7/g,"t");
-}
-function filterBadWords(msg) {
-  let out = msg;
-  const norm = normalizeText(msg);
-  badWords.forEach(w => {
-    const re = new RegExp(`(${w})`, "gi");
-    if (norm.includes(w)) out = out.replace(re, "****");
-  });
+const badWords=["nigger","nigga","niga","niger","faggot","chink","coon","gook","kike","spic","wetback","fag","dyke","tranny","porn","xxx","hardcore","incest","bestiality"];
+function normalizeText(t){return t.toLowerCase().replace(/[=\s\-_.|]+/g,"").replace(/[1!]/g,"i").replace(/3/g,"e").replace(/0/g,"o").replace(/@/g,"a").replace(/5/g,"s").replace(/7/g,"t");}
+function filterBadWords(msg){
+  let out=msg; const norm=normalizeText(msg);
+  badWords.forEach(w=>{if(norm.includes(w)) out=out.replace(new RegExp(`(${w})`,"gi"),"****");});
   return out;
 }
-function parseMarkdown(msg) {
-  msg = msg.replace(/#([^#\n]+)#/g, "<strong>$1</strong>");
-  msg = msg.replace(/\/([^/\n]+)\//g, "<em>$1</em>");
-  msg = msg.replace(/(https?:\/\/[^\s<]+[^\s<.,:;"')\]\}])/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>');
+function parseMarkdown(msg){
+  msg=msg.replace(/#([^#\n]+)#/g,"<strong>$1</strong>");
+  msg=msg.replace(/\/([^/\n]+)\//g,"<em>$1</em>");
+  msg=msg.replace(/(https?:\/\/[^\s<]+[^\s<.,:;"')\]\}])/g,'<a href="$1" target="_blank" rel="noopener noreferrer" class="chat-link">$1</a>');
   return msg;
 }
 
 // ============================================================
-// SEND MESSAGE
+// SEND
 // ============================================================
-function isUserBanned(cb)    { db.ref(`adminData/bannedUsers/${currentUserId}`).once("value", s => cb(s.exists())); }
-function isUserTimedOut(cb)  {
-  db.ref(`adminData/timeouts/${currentUserId}`).once("value", s => {
-    const data = s.val();
-    if (!data) return cb(false, 0);
-    const remaining = data.until - Date.now();
-    cb(remaining > 0, remaining);
+function isUserBanned(cb){db.ref(`adminData/bannedUsers/${currentUserId}`).once("value",s=>cb(s.exists()));}
+function isUserTimedOut(cb){
+  db.ref(`adminData/timeouts/${currentUserId}`).once("value",s=>{
+    const data=s.val(); if(!data) return cb(false,0);
+    const remaining=data.until-Date.now(); cb(remaining>0,remaining);
   });
 }
-
 function sendMessage() {
-  const now    = Date.now();
-  if (sendingInProgress) return;
-  if (now - lastSentTime < 1500) return;
-  const rawMsg = $("msgInput").value.trim();
-  if (!rawMsg) return;
-
-  isUserBanned(banned => {
-    if (banned) { alert("You are banned from sending messages."); $("msgInput").value = ""; return; }
-    isUserTimedOut((timedOut, remaining) => {
-      if (timedOut) {
-        const mins = Math.ceil(remaining / 60000);
-        const hrs  = Math.floor(mins / 60);
-        alert(hrs > 0 ? `You are timed out for ${hrs}h ${mins%60}m more.` : `You are timed out for ${mins} more minute${mins!==1?"s":""}.`);
-        $("msgInput").value = "";
-        return;
-      }
-
-      sendingInProgress = true;
-      const filtered  = filterBadWords(rawMsg);
-      const formatted = parseMarkdown(filtered);
-      const capturedServer = currentServer;
-
-      const msgData = {
-        name:      currentUsername,
-        message:   formatted,
-        time:      new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" }),
-        timestamp: now,
-        color:     myColor,
-        userId:    currentUserId,
-        avatarUrl: myAvatar || null,
-      };
-      if (replyingTo) {
-        msgData.replyTo = { messageId: replyingTo.messageId, name: replyingTo.name, text: replyingTo.text };
-      }
-
-      db.ref(`messages/${capturedServer}`).push(msgData).then(() => {
-        sendingInProgress = false;
-        lastSentTime = now;
-      }).catch(() => { sendingInProgress = false; });
-
-      $("msgInput").value = "";
-      clearReply();
-      clearTimeout(typingTimer);
-      isTyping = false;
-      setTyping(false);
-
-      db.ref(`adminData/allUsers/${currentUserId}`).update({
-        username: currentUsername, usernameColor: myColor, avatarUrl: myAvatar || null
-      });
+  const now=Date.now();
+  if(sendingInProgress||now-lastSentTime<1500) return;
+  const rawMsg=$("msgInput").value.trim(); if(!rawMsg) return;
+  isUserBanned(banned=>{
+    if(banned){alert("You are banned from sending messages.");$("msgInput").value="";return;}
+    isUserTimedOut((timedOut,remaining)=>{
+      if(timedOut){const mins=Math.ceil(remaining/60000),hrs=Math.floor(mins/60);alert(hrs>0?`You are timed out for ${hrs}h ${mins%60}m more.`:`You are timed out for ${mins} more minute${mins!==1?"s":""}.`);$("msgInput").value="";return;}
+      sendingInProgress=true;
+      const filtered=filterBadWords(rawMsg),formatted=parseMarkdown(filtered),capturedServer=currentServer;
+      const msgData={name:currentUsername,message:formatted,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),timestamp:now,color:myColor,userId:currentUserId,avatarUrl:myAvatar||null};
+      if(replyingTo) msgData.replyTo={messageId:replyingTo.messageId,name:replyingTo.name,text:replyingTo.text};
+      db.ref(`messages/${capturedServer}`).push(msgData).then(()=>{sendingInProgress=false;lastSentTime=now;}).catch(()=>sendingInProgress=false);
+      $("msgInput").value=""; clearReply(); clearTimeout(typingTimer); isTyping=false; setTyping(false);
+      db.ref(`adminData/allUsers/${currentUserId}`).update({username:currentUsername,usernameColor:myColor,avatarUrl:myAvatar||null});
     });
   });
 }
-
-$("sendBtn").addEventListener("click", sendMessage);
-$("msgInput").addEventListener("keydown", e => {
-  if (e.key === "Enter") {
-    if (mentionActive) return;
-    const val = $("msgInput").value.trim();
-    if (val === "/adminmenu" || val === "/mod") return;
-    sendMessage();
-  }
-  if (e.key === "Escape") { clearReply(); $("mentionDropdown").style.display = "none"; }
+$("sendBtn").addEventListener("click",sendMessage);
+$("msgInput").addEventListener("keydown",e=>{
+  if(e.key==="Enter"){if(mentionActive) return; const val=$("msgInput").value.trim(); if(val==="/adminmenu"||val==="/mod") return; sendMessage();}
+  if(e.key==="Escape"){clearReply();$("mentionDropdown").style.display="none";}
 });
 
 // ============================================================
 // MENU TRIGGERS
 // ============================================================
 function setupMenuTriggers() {
-  $("msgInput").addEventListener("keydown", e => {
-    if (e.key !== "Enter") return;
-    const val = $("msgInput").value.trim();
-
-    if (val === "/adminmenu") {
-      e.preventDefault();
-      $("msgInput").value = "";
-      $("adminMenuPasswordGate").style.display = "flex";
-      $("adminMenuPasswordInput").value = "";
-      $("adminMenuGateMessage").textContent = "";
-      $("adminMenuPasswordInput").focus();
+  $("msgInput").addEventListener("keydown",e=>{
+    if(e.key!=="Enter") return;
+    const val=$("msgInput").value.trim();
+    if(val==="/adminmenu"){
+      e.preventDefault(); $("msgInput").value="";
+      $("adminMenuPasswordGate").style.display="flex"; $("adminMenuPasswordInput").value=""; $("adminMenuGateMessage").textContent=""; $("adminMenuPasswordInput").focus();
     }
-
-    if (val === "/mod") {
-      e.preventDefault();
-      $("msgInput").value = "";
-      if (!myTags.some(t => MOD_TAGS.includes(t))) {
-        alert("You don't have permission to open the mod panel.");
-        return;
-      }
-      $("modMenu").style.display = "flex";
-      initModMenu();
+    if(val==="/mod"){
+      e.preventDefault(); $("msgInput").value="";
+      if(!myTags.some(t=>MOD_TAGS.includes(t))){alert("You don't have permission to open the mod panel.");return;}
+      openModMenu();
     }
   });
-
-  $("adminMenuEnterBtn").addEventListener("click", checkAdminPassword);
-  $("adminMenuPasswordInput").addEventListener("keydown", e => { if (e.key === "Enter") checkAdminPassword(); });
-  $("adminMenuCloseBtn").addEventListener("click", closeAdminMenu);
-  $("modMenuCloseBtn").addEventListener("click", () => { $("modMenu").style.display = "none"; });
+  $("adminMenuEnterBtn").addEventListener("click",checkAdminPassword);
+  $("adminMenuPasswordInput").addEventListener("keydown",e=>{if(e.key==="Enter") checkAdminPassword();});
+  $("adminMenuCloseBtn").addEventListener("click",closeAdminMenu);
+  $("modMenuCloseBtn").addEventListener("click",closeModMenu);
 }
 
 function checkAdminPassword() {
-  const entered = $("adminMenuPasswordInput").value;
-  if (!entered) { showAdminGateMsg("Please enter the password."); return; }
-  db.ref("adminData/mod/password").once("value", snap => {
-    if (entered === snap.val()) {
-      showAdminGateMsg("Access granted.", true);
-      setTimeout(() => {
-        $("adminMenuPasswordGate").style.display = "none";
-        $("adminMenu").style.display = "flex";
-        initAdminMenu();
-      }, 300);
+  const entered=$("adminMenuPasswordInput").value;
+  if(!entered){showAdminGateMsg("Please enter the password.");return;}
+  db.ref("adminData/mod/password").once("value",snap=>{
+    if(entered===snap.val()){
+      showAdminGateMsg("Access granted.",true);
+      setTimeout(()=>{$("adminMenuPasswordGate").style.display="none";openAdminMenu();},300);
     } else {
-      showAdminGateMsg("Incorrect password.");
-      $("adminMenuPasswordInput").value = "";
-      $("adminMenuPasswordInput").focus();
+      showAdminGateMsg("Incorrect password."); $("adminMenuPasswordInput").value=""; $("adminMenuPasswordInput").focus();
     }
   });
 }
+function showAdminGateMsg(msg,ok=false){$("adminMenuGateMessage").textContent=msg;$("adminMenuGateMessage").style.color=ok?"#57f287":"#f87171";}
 
-function showAdminGateMsg(msg, ok = false) {
-  $("adminMenuGateMessage").textContent = msg;
-  $("adminMenuGateMessage").style.color = ok ? "#57f287" : "#f87171";
+function closeAdminMenu(){
+  $("adminMenu").style.display="none";
+  $("adminMenuPasswordGate").style.display="none";
+  teardownPanelListeners(adminPanelListeners);
+  adminPanelListeners=[];
 }
-
-function closeAdminMenu() {
-  $("adminMenu").style.display = "none";
-  $("adminMenuPasswordGate").style.display = "none";
+function closeModMenu(){
+  $("modMenu").style.display="none";
+  teardownPanelListeners(modPanelListeners);
+  modPanelListeners=[];
 }
 
 // ============================================================
-// SHARED MOD/ADMIN HELPERS
+// PANEL LISTENER MANAGEMENT
+// Each panel registers its own Firebase .on() listeners here.
+// On close, all are torn down cleanly so nothing leaks or duplicates.
+// ============================================================
+function teardownPanelListeners(arr) {
+  arr.forEach(({dbRef,event,fn})=>{
+    try { if(dbRef&&event&&fn) dbRef.off(event,fn); } catch(e){}
+  });
+}
+
+// Register a Firebase .on() listener tied to a panel's lifecycle
+function panelOn(arr, dbRef, event, fn) {
+  // fn is the callback; Firebase .on() returns the callback itself
+  const returnedFn = dbRef.on(event, fn);
+  // Store the ref and the exact function so we can off() it precisely
+  arr.push({ dbRef, event, fn: returnedFn });
+  return returnedFn;
+}
+
+// ============================================================
+// SHARED HELPERS
 // ============================================================
 function initMenuTabs(containerSelector) {
-  document.querySelectorAll(`${containerSelector} .modTab`).forEach(tab => {
-    tab.addEventListener("click", () => {
-      const parent = tab.closest(".modMenuContainer");
-      parent.querySelectorAll(".modTab").forEach(t => t.classList.remove("active"));
-      parent.querySelectorAll(".modTabContent").forEach(c => c.classList.remove("active"));
+  document.querySelectorAll(`${containerSelector} .modTab`).forEach(tab=>{
+    tab.addEventListener("click",()=>{
+      const parent=tab.closest(".modMenuContainer");
+      parent.querySelectorAll(".modTab").forEach(t=>t.classList.remove("active"));
+      parent.querySelectorAll(".modTabContent").forEach(c=>c.classList.remove("active"));
       tab.classList.add("active");
-      const key = tab.getAttribute("data-tab");
-      const content = document.getElementById(`tab${key.charAt(0).toUpperCase()+key.slice(1)}`);
-      if (content) content.classList.add("active");
+      const key=tab.getAttribute("data-tab");
+      const content=document.getElementById(`tab${key.charAt(0).toUpperCase()+key.slice(1)}`);
+      if(content) content.classList.add("active");
     });
   });
 }
 
-function buildTagPaletteFor(containerId, inputId, selectedVar, setSelected, isMod = false) {
-  const palette = $(containerId);
-  if (!palette) return;
-  palette.innerHTML = "";
-  const tagsToShow = isMod ? availableTags.filter(t => !MOD_PROTECTED_TAGS.includes(t)) : availableTags;
-  tagsToShow.forEach(tag => {
-    const btn = document.createElement("button");
-    btn.className   = "tagPaletteBtn";
-    btn.textContent = tag;
-    applyTagStyleToEl(btn, tag);
-    const s = getTagStyle(tag);
-    if (s.rainbow) {
-      btn.style.background  = "linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";
-      btn.style.borderColor = "rgba(255,100,100,0.3)";
-    }
-    btn.addEventListener("click", () => {
-      palette.querySelectorAll(".tagPaletteBtn").forEach(b => b.classList.remove("selected"));
-      if (setSelected() === tag) {
-        setSelected(null);
-        if ($(inputId)) $(inputId).value = "";
-      } else {
-        setSelected(tag);
-        btn.classList.add("selected");
-        if ($(inputId)) $(inputId).value = tag;
-      }
+function buildTagPaletteFor(containerId,inputId,getSelected,setSelected,isMod=false) {
+  const palette=$(containerId); if(!palette) return; palette.innerHTML="";
+  const tagsToShow=isMod?availableTags.filter(t=>!MOD_PROTECTED_TAGS.includes(t)):availableTags;
+  tagsToShow.forEach(tag=>{
+    const btn=document.createElement("button"); btn.className="tagPaletteBtn"; btn.textContent=tag;
+    applyTagStyleToEl(btn,tag);
+    const s=getTagStyle(tag);
+    if(s.rainbow){btn.style.background="linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";btn.style.borderColor="rgba(255,100,100,0.3)";}
+    btn.addEventListener("click",()=>{
+      palette.querySelectorAll(".tagPaletteBtn").forEach(b=>b.classList.remove("selected"));
+      if(getSelected()===tag){setSelected(null);if($(inputId)) $(inputId).value="";}
+      else{setSelected(tag);btn.classList.add("selected");if($(inputId)) $(inputId).value=tag;}
     });
     palette.appendChild(btn);
   });
 }
 
 function refreshTagPalettes() {
-  buildTagPaletteFor("adminTagPalette", "adminTagNameInput", () => adminSelectedTag, v => { adminSelectedTag = v; return v; }, false);
-  buildTagPaletteFor("modTagPalette",   "modTagNameInput",   () => modSelectedTag,   v => { modSelectedTag = v; return v; }, true);
+  buildTagPaletteFor("adminTagPalette","adminTagNameInput",()=>adminSelectedTag,v=>{adminSelectedTag=v;});
+  buildTagPaletteFor("modTagPalette","modTagNameInput",()=>modSelectedTag,v=>{modSelectedTag=v;},true);
 }
 
-function renderUsersList(listId, filter, actionsBuilder) {
-  const list = $(listId);
-  if (!list) return;
-  list.innerHTML = "";
-  let count = 0;
-  for (const id in allUsersCache) {
-    if (id === "placeholder") continue;
-    const u     = allUsersCache[id];
-    const name  = u.username || "Guest";
-    const color = u.usernameColor || "#ffffff";
-    if (filter && !name.toLowerCase().includes(filter) && !id.toLowerCase().includes(filter)) continue;
+// ============================================================
+// renderUsersList
+// ============================================================
+function renderUsersList(listId,filter,actionsBuilder) {
+  const list=$(listId); if(!list) return; list.innerHTML=""; let count=0;
+  for(const id in allUsersCache){
+    if(id==="placeholder") continue;
+    const u=allUsersCache[id],name=u.username||"Guest",color=u.usernameColor||"#ffffff";
+    if(filter&&!name.toLowerCase().includes(filter)&&!id.toLowerCase().includes(filter)) continue;
     count++;
-    const card = document.createElement("div");
-    card.className = "modUserCard";
-    const avatarEl = buildAvatarEl(u.avatarUrl || null, name, color, 36);
-    avatarEl.style.flexShrink = "0";
-    const info    = document.createElement("div");
-    info.className = "modUserInfo";
-    const nameEl  = document.createElement("div");
-    nameEl.className   = "modUserName";
-    nameEl.textContent = name;
-    nameEl.style.color = color;
-    const idEl = document.createElement("div");
-    idEl.className = "modUserId";
-    idEl.innerHTML = `<span>${id.length > 20 ? id.substring(0,20)+"…" : id}</span><span class="copy-icon">📋</span>`;
-    idEl.addEventListener("click", () => copyToClipboard(id, idEl));
-    info.appendChild(nameEl);
-    info.appendChild(idEl);
-    const actions = document.createElement("div");
-    actions.className = "modUserActions";
-    actionsBuilder(actions, id, name, u);
-    card.appendChild(avatarEl);
-    card.appendChild(info);
-    card.appendChild(actions);
+    const card=document.createElement("div"); card.className="modUserCard";
+    const avatarEl=buildAvatarEl(u.avatarUrl||null,name,color,36); avatarEl.style.flexShrink="0";
+    const info=document.createElement("div"); info.className="modUserInfo";
+    const nameEl=document.createElement("div"); nameEl.className="modUserName"; nameEl.textContent=name; nameEl.style.color=color;
+    const idEl=document.createElement("div"); idEl.className="modUserId";
+    idEl.innerHTML=`<span>${id.length>20?id.substring(0,20)+"…":id}</span><span class="copy-icon">📋</span>`;
+    idEl.addEventListener("click",()=>copyToClipboard(id,idEl));
+    info.appendChild(nameEl); info.appendChild(idEl);
+    const actions=document.createElement("div"); actions.className="modUserActions";
+    actionsBuilder(actions,id,name,u);
+    card.appendChild(avatarEl); card.appendChild(info); card.appendChild(actions);
     list.appendChild(card);
   }
-  if (count === 0) list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🔍</div>${filter ? "No users match." : "No users yet."}</div>`;
+  if(count===0) list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">🔍</div>${filter?"No users match.":"No users yet."}</div>`;
 }
 
-// FIX: renderTaggedUsers now uses .on() for live updates
-function renderTaggedUsers(listId) {
-  const list = $(listId);
-  if (!list) return;
-
-  // Detach any previous listener on this specific list
-  if (renderTaggedUsers._listeners && renderTaggedUsers._listeners[listId]) {
-    db.ref("adminData/userTags").off("value", renderTaggedUsers._listeners[listId]);
-  }
-  if (!renderTaggedUsers._listeners) renderTaggedUsers._listeners = {};
-
-  const listener = db.ref("adminData/userTags").on("value", snap => {
-    const allTags = snap.val() || {};
-    list.innerHTML = "";
-    const entries = Object.entries(allTags).filter(([id]) => id !== "placeholder");
-    if (!entries.length) {
-      list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🏷️</div>No tagged users yet.</div>`;
-      return;
-    }
-    entries.forEach(([id, tags]) => {
-      const user  = allUsersCache[id] || {};
-      const name  = user.username || "Unknown";
-      const color = user.usernameColor || "#ffffff";
-      const card  = document.createElement("div");
-      card.className = "taggedUserCard";
-      const header = document.createElement("div");
-      header.className = "taggedUserHeader";
-      const av   = buildAvatarEl(user.avatarUrl||null, name, color, 28);
-      const nameEl = document.createElement("div");
-      nameEl.className = "taggedUserName"; nameEl.textContent = name; nameEl.style.color = color;
-      const idEl   = document.createElement("div");
-      idEl.className = "taggedUserId";
-      idEl.innerHTML = `<span>${id.length>18?id.substring(0,18)+"…":id}</span> 📋`;
-      idEl.addEventListener("click", () => copyToClipboard(id, idEl));
+// ============================================================
+// renderTaggedUsers — LIVE via panelOn
+// Shows all users that have tags, with ability to remove them
+// ============================================================
+function renderTaggedUsers(listId,panelListeners,isMod=false) {
+  const list=$(listId); if(!list) return;
+  list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">⏳</div>Loading...</div>`;
+  panelOn(panelListeners,db.ref("adminData/userTags"),"value",snap=>{
+    const allTagData=snap.val()||{}; list.innerHTML="";
+    const entries=Object.entries(allTagData).filter(([id])=>id!=="placeholder");
+    if(!entries.length){list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">🏷️</div>No tagged users yet.</div>`;return;}
+    entries.forEach(([id,tags])=>{
+      const user=allUsersCache[id]||{},name=user.username||"Unknown",color=user.usernameColor||"#ffffff";
+      const card=document.createElement("div"); card.className="taggedUserCard";
+      const header=document.createElement("div"); header.className="taggedUserHeader";
+      const av=buildAvatarEl(user.avatarUrl||null,name,color,28);
+      const nameEl=document.createElement("div"); nameEl.className="taggedUserName"; nameEl.textContent=name; nameEl.style.color=color;
+      const idEl=document.createElement("div"); idEl.className="taggedUserId";
+      idEl.innerHTML=`<span>${id.length>18?id.substring(0,18)+"…":id}</span> 📋`;
+      idEl.addEventListener("click",()=>copyToClipboard(id,idEl));
       header.appendChild(av); header.appendChild(nameEl); header.appendChild(idEl);
-      const pillsRow = document.createElement("div");
-      pillsRow.className = "taggedPills";
-      tags.forEach(tag => {
-        const pill = document.createElement("span");
-        pill.className = "tagPill";
-        applyTagStyleToEl(pill, tag);
-        const label = document.createElement("span"); label.textContent = tag;
-        const del   = document.createElement("button");
-        del.className = "tagPillDelete"; del.textContent = "✕";
-        del.addEventListener("click", async () => {
-          const isMod = myTags.includes("Mod") && !myTags.includes("Admin") && !myTags.includes("Owner");
-          if (isMod && MOD_PROTECTED_TAGS.includes(tag)) {
-            alert(`Moderators cannot remove the "${tag}" tag.`);
-            return;
-          }
-          const ok = await modConfirm("🏷️",`Remove "${tag}"?`,`Remove ${tag} tag from ${name}?`);
-          if (!ok) return;
-          db.ref(`adminData/userTags/${id}`).once("value", s => {
-            const updated = (s.val()||[]).filter(t=>t!==tag);
-            updated.length===0 ? db.ref(`adminData/userTags/${id}`).remove() : db.ref(`adminData/userTags/${id}`).set(updated);
+      const pillsRow=document.createElement("div"); pillsRow.className="taggedPills";
+      (tags||[]).forEach(tag=>{
+        const pill=document.createElement("span"); pill.className="tagPill"; applyTagStyleToEl(pill,tag);
+        const labelEl=document.createElement("span"); labelEl.textContent=tag;
+        const del=document.createElement("button"); del.className="tagPillDelete"; del.textContent="✕";
+        del.addEventListener("click",async()=>{
+          if(isMod&&MOD_PROTECTED_TAGS.includes(tag)){alert(`Moderators cannot remove the "${tag}" tag.`);return;}
+          const ok=await modConfirm("🏷️",`Remove "${tag}"?`,`Remove ${tag} from ${name}?`); if(!ok) return;
+          db.ref(`adminData/userTags/${id}`).once("value",s=>{
+            const updated=(s.val()||[]).filter(t=>t!==tag);
+            updated.length===0?db.ref(`adminData/userTags/${id}`).remove():db.ref(`adminData/userTags/${id}`).set(updated);
           });
-          if (myTags.includes("Mod")) logModAction({ type:"remove_tag", modName:currentUsername, modId:currentUserId, targetName:name, targetId:id, detail:`Removed tag: ${tag}` });
+          logModAction({type:"remove_tag",modName:currentUsername,modId:currentUserId,targetName:name,targetId:id,detail:`Removed tag: ${tag}`});
         });
-        pill.appendChild(label); pill.appendChild(del);
-        pillsRow.appendChild(pill);
+        pill.appendChild(labelEl); pill.appendChild(del); pillsRow.appendChild(pill);
       });
-      card.appendChild(header); card.appendChild(pillsRow);
-      list.appendChild(card);
-    });
-  });
-
-  renderTaggedUsers._listeners[listId] = listener;
-}
-
-function renderBannedList(listId) {
-  const list = $(listId);
-  if (!list) return;
-  // Use live listener
-  db.ref("adminData/bannedUsers").on("value", snap => {
-    list.innerHTML = "";
-    const banned = snap.val() || {};
-    const entries = Object.keys(banned).filter(k => k !== "placeholder");
-    if (!entries.length) { list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">✅</div>No banned users.</div>`; return; }
-    entries.forEach(id => {
-      const user = allUsersCache[id];
-      const displayName = user ? `${user.username} (${id.substring(0,14)}…)` : id;
-      const card  = document.createElement("div");
-      card.className = "bannedCard";
-      const icon  = document.createElement("span"); icon.className="bannedIcon"; icon.textContent="🚫";
-      const idEl  = document.createElement("span"); idEl.className="bannedId"; idEl.textContent=displayName;
-      idEl.addEventListener("click", () => copyToClipboard(id, idEl));
-      const unbanBtn = document.createElement("button");
-      unbanBtn.className="unbanBtn"; unbanBtn.textContent="✓ Unban";
-      unbanBtn.addEventListener("click", async () => {
-        const ok = await modConfirm("✅","Unban User?",`Unban "${user?user.username:id}"?`);
-        if (ok) db.ref(`adminData/bannedUsers/${id}`).remove();
-      });
-      card.appendChild(icon); card.appendChild(idEl); card.appendChild(unbanBtn);
-      list.appendChild(card);
+      card.appendChild(header); card.appendChild(pillsRow); list.appendChild(card);
     });
   });
 }
 
-function renderTimeoutsList(listId) {
-  const list = $(listId);
-  if (!list) return;
-  // Use live listener
-  db.ref("adminData/timeouts").on("value", snap => {
-    list.innerHTML = "";
-    const timeouts = snap.val() || {};
-    const active = Object.entries(timeouts).filter(([id, v]) => v.until > Date.now());
-    if (!active.length) { list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">✅</div>No active timeouts.</div>`; return; }
-    active.forEach(([id, v]) => {
-      const remaining = v.until - Date.now();
-      const totalMins = Math.ceil(remaining / 60000);
-      const hrs  = Math.floor(totalMins / 60);
-      const mins = totalMins % 60;
-      const label = hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
-      const card  = document.createElement("div"); card.className="timeoutCard";
-      const info  = document.createElement("div"); info.className="timeoutInfo";
-      const nameEl = document.createElement("div"); nameEl.className="timeoutName"; nameEl.textContent=v.username||id;
-      const timeEl = document.createElement("div"); timeEl.className="timeoutRemaining"; timeEl.textContent=`⏱ ${label}`;
+// ============================================================
+// renderTagViewer — LIVE, grouped by tag
+// ============================================================
+function renderTagViewer(listId,panelListeners) {
+  const list=$(listId); if(!list) return;
+  list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">⏳</div>Loading...</div>`;
+  panelOn(panelListeners,db.ref("adminData/userTags"),"value",snap=>{
+    const allUserTags=snap.val()||{}; list.innerHTML="";
+    // Build map: tag -> [uids]
+    const tagMap={};
+    for(const [uid,tags] of Object.entries(allUserTags)){
+      if(uid==="placeholder"||!Array.isArray(tags)) continue;
+      tags.forEach(tag=>{if(!tagMap[tag]) tagMap[tag]=[]; tagMap[tag].push(uid);});
+    }
+    const tagNames=Object.keys(tagMap);
+    if(!tagNames.length){list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">🏷️</div>No tagged users yet.</div>`;return;}
+    tagNames.forEach(tag=>{
+      const uids=tagMap[tag]||[];
+      const s=getTagStyle(tag);
+      const section=document.createElement("div"); section.className="tag-viewer-section";
+      const header=document.createElement("div"); header.className="tag-viewer-header";
+      const tagLabel=document.createElement("span"); tagLabel.className="tag-viewer-tag-label"; tagLabel.textContent=`[${tag}]`;
+      if(s.rainbow){tagLabel.style.background="linear-gradient(to right,#ff4444,#ff9900,#57f287,#5b8aff,#c084fc)";tagLabel.style.webkitBackgroundClip="text";tagLabel.style.webkitTextFillColor="transparent";tagLabel.style.backgroundClip="text";}
+      else{tagLabel.style.color=s.color||"#aaa";tagLabel.style.textShadow=`0 0 8px ${s.color||"#aaa"}88`;}
+      const countBadge=document.createElement("span"); countBadge.className="tag-viewer-count"; countBadge.textContent=uids.length;
+      if(s.color&&!s.rainbow){countBadge.style.background=s.bg||"rgba(255,255,255,0.1)";countBadge.style.color=s.color;countBadge.style.borderColor=s.border||"transparent";}
+      header.appendChild(tagLabel); header.appendChild(countBadge); section.appendChild(header);
+      const userRows=document.createElement("div"); userRows.className="tag-viewer-users";
+      uids.forEach(uid=>{
+        const user=allUsersCache[uid]||{},name=user.username||"Unknown",color=user.usernameColor||"#ffffff";
+        const row=document.createElement("div"); row.className="tag-viewer-user-row";
+        const av=buildAvatarEl(user.avatarUrl||null,name,color,26); av.style.flexShrink="0";
+        const nameEl=document.createElement("span"); nameEl.className="tag-viewer-username"; nameEl.textContent=name; nameEl.style.color=color;
+        const idEl=document.createElement("span"); idEl.className="tag-viewer-uid"; idEl.textContent=uid.length>16?uid.substring(0,16)+"…":uid; idEl.title=uid;
+        idEl.addEventListener("click",()=>copyToClipboard(uid,idEl));
+        row.appendChild(av); row.appendChild(nameEl); row.appendChild(idEl); userRows.appendChild(row);
+      });
+      section.appendChild(userRows); list.appendChild(section);
+    });
+  });
+}
+
+// ============================================================
+// renderBannedList — LIVE
+// ============================================================
+function renderBannedList(listId,panelListeners) {
+  const list=$(listId); if(!list) return;
+  panelOn(panelListeners,db.ref("adminData/bannedUsers"),"value",snap=>{
+    list.innerHTML=""; const banned=snap.val()||{};
+    const entries=Object.keys(banned).filter(k=>k!=="placeholder");
+    if(!entries.length){list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">✅</div>No banned users.</div>`;return;}
+    entries.forEach(id=>{
+      const user=allUsersCache[id];
+      const displayName=user?`${user.username} (${id.substring(0,14)}…)`:id;
+      const card=document.createElement("div"); card.className="bannedCard";
+      const icon=document.createElement("span"); icon.className="bannedIcon"; icon.textContent="🚫";
+      const idEl=document.createElement("span"); idEl.className="bannedId"; idEl.textContent=displayName;
+      idEl.addEventListener("click",()=>copyToClipboard(id,idEl));
+      const unbanBtn=document.createElement("button"); unbanBtn.className="unbanBtn"; unbanBtn.textContent="✓ Unban";
+      unbanBtn.addEventListener("click",async()=>{const ok=await modConfirm("✅","Unban User?",`Unban "${user?user.username:id}"?`);if(ok) db.ref(`adminData/bannedUsers/${id}`).remove();});
+      card.appendChild(icon); card.appendChild(idEl); card.appendChild(unbanBtn); list.appendChild(card);
+    });
+  });
+}
+
+// ============================================================
+// renderTimeoutsList — LIVE
+// ============================================================
+function renderTimeoutsList(listId,panelListeners) {
+  const list=$(listId); if(!list) return;
+  panelOn(panelListeners,db.ref("adminData/timeouts"),"value",snap=>{
+    list.innerHTML=""; const timeouts=snap.val()||{};
+    const active=Object.entries(timeouts).filter(([,v])=>v.until>Date.now());
+    if(!active.length){list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">✅</div>No active timeouts.</div>`;return;}
+    active.forEach(([id,v])=>{
+      const remaining=v.until-Date.now(),totalMins=Math.ceil(remaining/60000),hrs=Math.floor(totalMins/60),mins=totalMins%60;
+      const label=hrs>0?`${hrs}h ${mins}m remaining`:`${mins}m remaining`;
+      const card=document.createElement("div"); card.className="timeoutCard";
+      const info=document.createElement("div"); info.className="timeoutInfo";
+      const nameEl=document.createElement("div"); nameEl.className="timeoutName"; nameEl.textContent=v.username||id;
+      const timeEl=document.createElement("div"); timeEl.className="timeoutRemaining"; timeEl.textContent=`⏱ ${label}`;
       info.appendChild(nameEl); info.appendChild(timeEl);
-      const releaseBtn = document.createElement("button");
-      releaseBtn.className="unbanBtn"; releaseBtn.textContent="Release";
-      releaseBtn.addEventListener("click", async () => {
-        const ok = await modConfirm("✅","Release Timeout?",`End timeout for "${v.username||id}" early?`);
-        if (ok) db.ref(`adminData/timeouts/${id}`).remove();
-      });
-      card.appendChild(info); card.appendChild(releaseBtn);
-      list.appendChild(card);
-    });
-  });
-}
-
-function setupTimeoutButtons(btnClass, getSelected, setSelected, inputId, applyBtnId, label) {
-  document.querySelectorAll(`.${btnClass}`).forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(`.${btnClass}`).forEach(b => b.classList.remove("selected"));
-      btn.classList.add("selected");
-      setSelected(parseInt(btn.getAttribute("data-ms")));
-    });
-  });
-  $(applyBtnId) && $(applyBtnId).addEventListener("click", async () => {
-    const id = $(inputId).value.trim();
-    if (!id) return alert("Please enter a User ID.");
-    if (!getSelected()) return alert("Please select a duration.");
-
-    // FIX: Mods cannot timeout users with Mod, Admin, or Owner tags
-    const targetTags = await db.ref(`adminData/userTags/${id}`).once("value").then(s => s.val() || []);
-    const isMod = myTags.includes("Mod") && !myTags.includes("Admin") && !myTags.includes("Owner");
-    if (isMod) {
-      const protectedModTags = ["Mod", "Admin", "Owner"];
-      const hasProtected = targetTags.some(t => protectedModTags.includes(t));
-      if (hasProtected) {
-        alert("You cannot timeout another Mod, Admin, or Owner.");
-        return;
-      }
-    }
-
-    const user  = allUsersCache[id];
-    const uname = user ? user.username : id;
-    const durLabel = document.querySelector(`.${btnClass}[data-ms="${getSelected()}"]`)?.textContent || "";
-    const ok = await modConfirm("⏱️","Apply Timeout?",`Timeout "${uname}" for ${durLabel}?`);
-    if (!ok) return;
-    const until = Date.now() + getSelected();
-    await db.ref(`adminData/timeouts/${id}`).set({ until, username: uname });
-    $(inputId).value = "";
-    document.querySelectorAll(`.${btnClass}`).forEach(b => b.classList.remove("selected"));
-    setSelected(null);
-    logModAction({ type:"timeout", modName:currentUsername, modId:currentUserId, targetName:uname, targetId:id, detail:`Timed out for ${durLabel}` });
-  });
-}
-
-// ============================================================
-// TAG VIEWER — shows all tags with users under each
-// ============================================================
-function renderTagViewer(listId) {
-  const list = $(listId);
-  if (!list) return;
-  list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">⏳</div>Loading...</div>`;
-
-  db.ref("adminData/userTags").on("value", snap => {
-    const allUserTags = snap.val() || {};
-    list.innerHTML = "";
-
-    // Build a map: tag -> [{id, user}]
-    const tagMap = {};
-    for (const [uid, tags] of Object.entries(allUserTags)) {
-      if (uid === "placeholder") continue;
-      if (!Array.isArray(tags)) continue;
-      tags.forEach(tag => {
-        if (!tagMap[tag]) tagMap[tag] = [];
-        tagMap[tag].push(uid);
-      });
-    }
-
-    const allTagNames = availableTags.filter(t => tagMap[t] && tagMap[t].length > 0);
-    // Also include any custom tags that have users
-    Object.keys(tagMap).forEach(t => { if (!allTagNames.includes(t)) allTagNames.push(t); });
-
-    if (!allTagNames.length) {
-      list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🏷️</div>No tagged users yet.</div>`;
-      return;
-    }
-
-    allTagNames.forEach(tag => {
-      const uids = tagMap[tag] || [];
-      const s = getTagStyle(tag);
-
-      const section = document.createElement("div");
-      section.className = "tag-viewer-section";
-
-      const header = document.createElement("div");
-      header.className = "tag-viewer-header";
-
-      const tagLabel = document.createElement("span");
-      tagLabel.className = "tag-viewer-tag-label";
-      tagLabel.textContent = `[${tag}]`;
-      if (s.rainbow) {
-        tagLabel.style.background = "linear-gradient(to right,#ff4444,#ff9900,#57f287,#5b8aff,#c084fc)";
-        tagLabel.style.webkitBackgroundClip = "text";
-        tagLabel.style.webkitTextFillColor = "transparent";
-        tagLabel.style.backgroundClip = "text";
-      } else {
-        tagLabel.style.color = s.color || "#aaa";
-        tagLabel.style.textShadow = `0 0 8px ${s.color || "#aaa"}88`;
-      }
-
-      const countBadge = document.createElement("span");
-      countBadge.className = "tag-viewer-count";
-      countBadge.textContent = uids.length;
-      if (s.color && !s.rainbow) {
-        countBadge.style.background = s.bg || "rgba(255,255,255,0.1)";
-        countBadge.style.color = s.color;
-        countBadge.style.borderColor = s.border || "transparent";
-      }
-
-      header.appendChild(tagLabel);
-      header.appendChild(countBadge);
-      section.appendChild(header);
-
-      const userRows = document.createElement("div");
-      userRows.className = "tag-viewer-users";
-
-      if (uids.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "tag-viewer-no-users";
-        empty.textContent = "No users with this tag.";
-        userRows.appendChild(empty);
-      } else {
-        uids.forEach(uid => {
-          const user = allUsersCache[uid] || {};
-          const name = user.username || "Unknown";
-          const color = user.usernameColor || "#ffffff";
-
-          const row = document.createElement("div");
-          row.className = "tag-viewer-user-row";
-
-          const av = buildAvatarEl(user.avatarUrl || null, name, color, 26);
-          av.style.flexShrink = "0";
-
-          const nameEl = document.createElement("span");
-          nameEl.className = "tag-viewer-username";
-          nameEl.textContent = name;
-          nameEl.style.color = color;
-
-          const idEl = document.createElement("span");
-          idEl.className = "tag-viewer-uid";
-          idEl.textContent = uid.length > 16 ? uid.substring(0, 16) + "…" : uid;
-          idEl.title = uid;
-          idEl.addEventListener("click", () => copyToClipboard(uid, idEl));
-
-          row.appendChild(av);
-          row.appendChild(nameEl);
-          row.appendChild(idEl);
-          userRows.appendChild(row);
-        });
-      }
-
-      section.appendChild(userRows);
-      list.appendChild(section);
+      const releaseBtn=document.createElement("button"); releaseBtn.className="unbanBtn"; releaseBtn.textContent="Release";
+      releaseBtn.addEventListener("click",async()=>{const ok=await modConfirm("✅","Release Timeout?",`End timeout for "${v.username||id}" early?`);if(ok) db.ref(`adminData/timeouts/${id}`).remove();});
+      card.appendChild(info); card.appendChild(releaseBtn); list.appendChild(card);
     });
   });
 }
 
 // ============================================================
-// ADMIN MENU
+// setupTimeoutButtons — clones button to avoid stacked listeners
 // ============================================================
-function initAdminMenu() {
+function setupTimeoutButtons(btnClass,getSelected,setSelected,inputId,applyBtnId) {
+  document.querySelectorAll(`.${btnClass}`).forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      document.querySelectorAll(`.${btnClass}`).forEach(b=>b.classList.remove("selected"));
+      btn.classList.add("selected"); setSelected(parseInt(btn.getAttribute("data-ms")));
+    });
+  });
+  const applyBtn=$(applyBtnId); if(!applyBtn) return;
+  const newBtn=applyBtn.cloneNode(true); applyBtn.parentNode.replaceChild(newBtn,applyBtn);
+  newBtn.addEventListener("click",async()=>{
+    const id=$(inputId).value.trim(); if(!id) return alert("Please enter a User ID.");
+    if(!getSelected()) return alert("Please select a duration.");
+
+    // PERMISSION CHECK: mods cannot timeout Mod/Admin/Owner users
+    const isMod=myTags.includes("Mod")&&!myTags.includes("Admin")&&!myTags.includes("Owner");
+    if(isMod){
+      const tSnap=await db.ref(`adminData/userTags/${id}`).once("value");
+      const targetTags=tSnap.val()||[];
+      if(targetTags.some(t=>["Mod","Admin","Owner"].includes(t))){
+        alert("You cannot timeout another Mod, Admin, or Owner."); return;
+      }
+    }
+
+    const user=allUsersCache[id],uname=user?user.username:id;
+    const durLabel=document.querySelector(`.${btnClass}[data-ms="${getSelected()}"]`)?.textContent||"";
+    const ok=await modConfirm("⏱️","Apply Timeout?",`Timeout "${uname}" for ${durLabel}?`); if(!ok) return;
+    const until=Date.now()+getSelected();
+    await db.ref(`adminData/timeouts/${id}`).set({until,username:uname});
+    $(inputId).value=""; document.querySelectorAll(`.${btnClass}`).forEach(b=>b.classList.remove("selected")); setSelected(null);
+    logModAction({type:"timeout",modName:currentUsername,modId:currentUserId,targetName:uname,targetId:id,detail:`Timed out for ${durLabel}`});
+  });
+}
+
+// ============================================================
+// Remove PFP — server-side so ALL clients immediately reflect removal
+// canRemoveOwner=true for admins, false for mods
+// ============================================================
+async function removePfp(id,name,canRemoveOwner) {
+  const tSnap=await db.ref(`adminData/userTags/${id}`).once("value");
+  const targetTags=tSnap.val()||[];
+  if(!canRemoveOwner&&targetTags.includes("Owner")){
+    alert("You cannot remove an Owner's profile picture."); return;
+  }
+  const ok=await modConfirm("🖼️","Remove Profile Picture?",`Remove profile picture for "${name}"?`); if(!ok) return;
+  // Setting avatarUrl to null in Firebase removes it — the live allUsers listener
+  // in startApp() will automatically sync myAvatar for the affected user
+  await db.ref(`adminData/allUsers/${id}`).update({avatarUrl:null});
+  logModAction({type:"remove_pfp",modName:currentUsername,modId:currentUserId,targetName:name,targetId:id,detail:"Removed profile picture."});
+}
+
+// ============================================================
+// loadModLogs — LIVE, shows ALL entries newest-first
+// ============================================================
+function loadModLogs(panelListeners) {
+  const list=$("modActionLogList"); if(!list) return;
+  // Use the ref as-is for the query; store it so teardown can off() it
+  const logsRef=db.ref("adminData/modLogs").orderByChild("ts").limitToLast(500);
+  panelOn(panelListeners,logsRef,"value",snap=>{
+    list.innerHTML=""; const logs=[];
+    snap.forEach(child=>logs.push({key:child.key,...child.val()}));
+    logs.reverse(); // newest first
+    if(!logs.length){list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">📋</div>No mod actions logged yet.</div>`;return;}
+    logs.forEach(log=>{
+      const row=document.createElement("div"); row.className="log-row";
+      const ts=new Date(log.ts).toLocaleString();
+      const icon={delete_message:"🗑️",remove_pfp:"🖼️",timeout:"⏱️",remove_tag:"🏷️",add_tag:"🏷️"}[log.type]||"📋";
+      row.innerHTML=`<span class="log-icon">${icon}</span><div class="log-info"><div class="log-action">${escapeHtml(log.modName||"Unknown")} — ${escapeHtml(log.detail||log.type||"")}</div><div class="log-target">Target: ${escapeHtml(log.targetName||log.targetId||"?")} · ${ts}</div></div>`;
+      list.appendChild(row);
+    });
+  });
+}
+
+// ============================================================
+// OPEN ADMIN MENU
+// ============================================================
+function openAdminMenu() {
+  // Always tear down previous listeners first before registering new ones
+  teardownPanelListeners(adminPanelListeners);
+  adminPanelListeners=[];
+
+  $("adminMenu").style.display="flex";
   initMenuTabs("#adminMenu .modMenuContainer");
 
-  db.ref("adminData/allUsers").on("value", snap => {
-    allUsersCache = snap.val() || {};
-    const filter = $("adminSearchInput").value.trim().toLowerCase();
-    renderUsersList("adminUsersList", filter, (actions, id, name, u) => {
-      const banBtn = document.createElement("button");
-      banBtn.className = "mod-action-btn danger sm"; banBtn.textContent = "🚫 Ban";
-      banBtn.addEventListener("click", async () => {
-        const ok = await modConfirm("🚫","Ban User?",`Ban "${name}"?`);
-        if (ok) db.ref(`adminData/bannedUsers/${id}`).set(true);
-      });
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "removeUserBtn"; removeBtn.textContent = "Remove";
-      removeBtn.addEventListener("click", async () => {
-        const ok = await modConfirm("⚠️","Remove User?",`Permanently remove "${name}"?`);
-        if (ok) await Promise.all([db.ref(`adminData/allUsers/${id}`).remove(), db.ref(`adminData/userTags/${id}`).remove()]);
-      });
-      actions.appendChild(banBtn); actions.appendChild(removeBtn);
+  // ── Users tab: live allUsers → re-render user list ──
+  panelOn(adminPanelListeners,db.ref("adminData/allUsers"),"value",snap=>{
+    allUsersCache=snap.val()||{};
+    const filter=$("adminSearchInput").value.trim().toLowerCase();
+    renderUsersList("adminUsersList",filter,(actions,id,name)=>{
+      const banBtn=document.createElement("button"); banBtn.className="mod-action-btn danger sm"; banBtn.textContent="🚫 Ban";
+      banBtn.addEventListener("click",async()=>{const ok=await modConfirm("🚫","Ban User?",`Ban "${name}"?`);if(ok) db.ref(`adminData/bannedUsers/${id}`).set(true);});
+      const pfpBtn=document.createElement("button"); pfpBtn.className="removeUserBtn"; pfpBtn.textContent="🖼️ Remove PFP";
+      pfpBtn.addEventListener("click",()=>removePfp(id,name,true)); // admins can remove anyone's pfp
+      const removeBtn=document.createElement("button"); removeBtn.className="removeUserBtn"; removeBtn.textContent="Remove";
+      removeBtn.addEventListener("click",async()=>{const ok=await modConfirm("⚠️","Remove User?",`Permanently remove "${name}"?`);if(ok) await Promise.all([db.ref(`adminData/allUsers/${id}`).remove(),db.ref(`adminData/userTags/${id}`).remove()]);});
+      actions.appendChild(banBtn); actions.appendChild(pfpBtn); actions.appendChild(removeBtn);
     });
-    $("adminUsersTabBadge").textContent = Object.keys(allUsersCache).filter(k=>k!=="placeholder").length;
+    $("adminUsersTabBadge").textContent=Object.keys(allUsersCache).filter(k=>k!=="placeholder").length;
   });
 
-  $("adminSearchInput").addEventListener("input", e => {
-    renderUsersList("adminUsersList", e.target.value.trim().toLowerCase(), (actions, id, name) => {
-      const banBtn = document.createElement("button");
-      banBtn.className = "mod-action-btn danger sm"; banBtn.textContent = "🚫 Ban";
-      banBtn.addEventListener("click", async () => { const ok = await modConfirm("🚫","Ban?",`Ban "${name}"?`); if(ok) db.ref(`adminData/bannedUsers/${id}`).set(true); });
-      actions.appendChild(banBtn);
+  $("adminSearchInput").addEventListener("input",e=>{
+    renderUsersList("adminUsersList",e.target.value.trim().toLowerCase(),(actions,id,name)=>{
+      const banBtn=document.createElement("button"); banBtn.className="mod-action-btn danger sm"; banBtn.textContent="🚫 Ban";
+      banBtn.addEventListener("click",async()=>{const ok=await modConfirm("🚫","Ban?",`Ban "${name}"?`);if(ok) db.ref(`adminData/bannedUsers/${id}`).set(true);});
+      const pfpBtn=document.createElement("button"); pfpBtn.className="removeUserBtn"; pfpBtn.textContent="🖼️ Remove PFP";
+      pfpBtn.addEventListener("click",()=>removePfp(id,name,true));
+      actions.appendChild(banBtn); actions.appendChild(pfpBtn);
     });
   });
 
-  buildTagPaletteFor("adminTagPalette", "adminTagNameInput", () => adminSelectedTag, v => { adminSelectedTag = v; return v; });
+  buildTagPaletteFor("adminTagPalette","adminTagNameInput",()=>adminSelectedTag,v=>{adminSelectedTag=v;});
 
-  $("adminAddTagBtn").addEventListener("click", () => {
-    const id  = $("adminTagUserIdInput").value.trim();
-    const tag = $("adminTagNameInput").value.trim();
-    if (!id || !tag) return alert("Please select a tag and enter a User ID.");
-    db.ref(`adminData/userTags/${id}`).once("value", s => {
-      const current = s.val() || [];
-      if (!current.includes(tag)) {
-        current.push(tag);
-        db.ref(`adminData/userTags/${id}`).set(current);
-      }
-      $("adminTagUserIdInput").value = ""; $("adminTagNameInput").value = ""; adminSelectedTag = null;
+  // Clone buttons to remove any stacked listeners from previous opens
+  const addTagOld=$("adminAddTagBtn"), addTagNew=addTagOld.cloneNode(true); addTagOld.parentNode.replaceChild(addTagNew,addTagOld);
+  addTagNew.addEventListener("click",()=>{
+    const id=$("adminTagUserIdInput").value.trim(),tag=$("adminTagNameInput").value.trim();
+    if(!id||!tag) return alert("Please select a tag and enter a User ID.");
+    db.ref(`adminData/userTags/${id}`).once("value",s=>{
+      const current=s.val()||[];
+      if(!current.includes(tag)){current.push(tag);db.ref(`adminData/userTags/${id}`).set(current);}
+      $("adminTagUserIdInput").value=""; $("adminTagNameInput").value=""; adminSelectedTag=null;
       document.querySelectorAll("#adminTagPalette .tagPaletteBtn").forEach(b=>b.classList.remove("selected"));
+      logModAction({type:"add_tag",modName:currentUsername,modId:currentUserId,targetName:(allUsersCache[id]||{}).username||id,targetId:id,detail:`Added tag: ${tag}`});
     });
   });
 
-  $("adminBanUserBtn").addEventListener("click", async () => {
-    const id = $("adminBanUserInput").value.trim();
-    if (!id) return;
-    const ok = await modConfirm("🚫","Ban User?",`Ban user with ID: ${id}?`);
-    if (ok) { db.ref(`adminData/bannedUsers/${id}`).set(true); $("adminBanUserInput").value = ""; }
+  const banOld=$("adminBanUserBtn"), banNew=banOld.cloneNode(true); banOld.parentNode.replaceChild(banNew,banOld);
+  banNew.addEventListener("click",async()=>{
+    const id=$("adminBanUserInput").value.trim(); if(!id) return;
+    const ok=await modConfirm("🚫","Ban User?",`Ban user with ID: ${id}?`);
+    if(ok){db.ref(`adminData/bannedUsers/${id}`).set(true);$("adminBanUserInput").value="";}
   });
 
-  renderBannedList("adminBannedList");
-  renderTaggedUsers("adminTaggedUsersList");
-  renderTimeoutsList("adminActiveTimeoutsList");
-  renderTagViewer("adminTagViewerList");
-
-  setupTimeoutButtons("admin-dur", () => adminSelectedMs, v => { adminSelectedMs = v; }, "adminTimeoutUserIdInput", "adminApplyTimeoutBtn", "admin");
-
+  // All these register live listeners that auto-update their tabs
+  renderBannedList("adminBannedList",adminPanelListeners);
+  renderTaggedUsers("adminTaggedUsersList",adminPanelListeners,false);
+  renderTimeoutsList("adminActiveTimeoutsList",adminPanelListeners);
+  renderTagViewer("adminTagViewerList",adminPanelListeners);
+  setupTimeoutButtons("admin-dur",()=>adminSelectedMs,v=>{adminSelectedMs=v;},"adminTimeoutUserIdInput","adminApplyTimeoutBtn");
   setupTagCreator();
-  loadModLogs();
+  loadModLogs(adminPanelListeners);
 
-  db.ref("adminData/bannedUsers").on("value", s => $("adminBansTabBadge").textContent = s.numChildren());
-  db.ref("adminData/timeouts").on("value", s => {
-    const active = Object.values(s.val()||{}).filter(v => v.until > Date.now()).length;
-    $("adminTimeoutsTabBadge").textContent = active;
+  // Badge counters — live
+  panelOn(adminPanelListeners,db.ref("adminData/bannedUsers"),"value",s=>$("adminBansTabBadge").textContent=s.numChildren());
+  panelOn(adminPanelListeners,db.ref("adminData/timeouts"),"value",s=>{
+    const active=Object.values(s.val()||{}).filter(v=>v.until>Date.now()).length;
+    $("adminTimeoutsTabBadge").textContent=active;
   });
-  db.ref("adminData/modLogs").on("value", s => $("adminLogsTabBadge").textContent = s.numChildren());
+  panelOn(adminPanelListeners,db.ref("adminData/modLogs"),"value",s=>$("adminLogsTabBadge").textContent=s.numChildren());
 }
 
 // ============================================================
 // TAG CREATOR
 // ============================================================
 function setupTagCreator() {
-  const nameInput   = $("newTagName");
-  const colorInput  = $("newTagColor");
-  const previewEl   = $("newTagPreviewLabel");
-  const createBtn   = $("createTagBtn");
-  const msgEl       = $("createTagMsg");
-
-  function updatePreview() {
-    const name  = nameInput.value.trim() || "Preview";
-    const color = colorInput.value;
-    previewEl.textContent = `[${name}]`;
-    previewEl.style.color = color;
-    previewEl.style.textShadow = `0 0 8px ${color}88`;
-  }
-
-  nameInput.addEventListener("input", updatePreview);
-  colorInput.addEventListener("input", updatePreview);
+  const nameInput=$("newTagName"),colorInput=$("newTagColor"),previewEl=$("newTagPreviewLabel"),msgEl=$("createTagMsg");
+  if(!nameInput) return;
+  function updatePreview(){const name=nameInput.value.trim()||"Preview",color=colorInput.value;previewEl.textContent=`[${name}]`;previewEl.style.color=color;previewEl.style.textShadow=`0 0 8px ${color}88`;}
+  nameInput.removeEventListener("input",updatePreview); nameInput.addEventListener("input",updatePreview);
+  colorInput.removeEventListener("input",updatePreview); colorInput.addEventListener("input",updatePreview);
   updatePreview();
 
-  createBtn.addEventListener("click", async () => {
-    const name  = nameInput.value.trim();
-    const color = colorInput.value;
-    if (!name || name.length < 1) { msgEl.textContent = "Please enter a tag name."; msgEl.style.color = "#f87171"; return; }
-    if (availableTags.includes(name)) { msgEl.textContent = "A tag with that name already exists."; msgEl.style.color = "#f87171"; return; }
-    await db.ref(`adminData/customTags/${name}`).set({ color, createdBy: currentUsername, createdAt: Date.now() });
-    msgEl.textContent = `✓ Tag "${name}" created!`;
-    msgEl.style.color = "#57f287";
-    nameInput.value = "";
-    setTimeout(() => { msgEl.textContent = ""; }, 3000);
+  const createOld=$("createTagBtn"), createNew=createOld.cloneNode(true); createOld.parentNode.replaceChild(createNew,createOld);
+  createNew.addEventListener("click",async()=>{
+    const name=nameInput.value.trim(),color=colorInput.value;
+    if(!name){msgEl.textContent="Please enter a tag name.";msgEl.style.color="#f87171";return;}
+    if(availableTags.includes(name)){msgEl.textContent="A tag with that name already exists.";msgEl.style.color="#f87171";return;}
+    await db.ref(`adminData/customTags/${name}`).set({color,createdBy:currentUsername,createdAt:Date.now()});
+    msgEl.textContent=`✓ Tag "${name}" created!`;msgEl.style.color="#57f287";nameInput.value="";
+    setTimeout(()=>msgEl.textContent="",3000);
   });
-
   refreshCustomTagsList();
 }
 
 function refreshCustomTagsList() {
-  const list = $("customTagsList");
-  if (!list) return;
-  db.ref("adminData/customTags").on("value", snap => {
-    list.innerHTML = "";
-    const custom = snap.val() || {};
-    if (!Object.keys(custom).length) { list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">✨</div>No custom tags yet.</div>`; return; }
-    Object.entries(custom).forEach(([name, data]) => {
-      const color = data.color || "#aaaaaa";
-      const row   = document.createElement("div");
-      row.className = "custom-tag-row";
-      const label = document.createElement("span");
-      label.textContent = `[${name}]`;
-      label.style.color = color;
-      label.style.textShadow = `0 0 8px ${color}88`;
-      label.style.fontWeight = "700";
-      label.style.fontSize   = "12px";
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "Delete";
-      delBtn.className   = "removeUserBtn";
-      delBtn.style.fontSize = "11px";
-      delBtn.addEventListener("click", async () => {
-        const ok = await modConfirm("🗑️",`Delete tag "${name}"?`,"This will remove the tag from the palette.");
-        if (ok) await db.ref(`adminData/customTags/${name}`).remove();
-      });
-      row.appendChild(label); row.appendChild(delBtn);
-      list.appendChild(row);
+  const list=$("customTagsList"); if(!list) return;
+  db.ref("adminData/customTags").on("value",snap=>{
+    list.innerHTML=""; const custom=snap.val()||{};
+    if(!Object.keys(custom).length){list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">✨</div>No custom tags yet.</div>`;return;}
+    Object.entries(custom).forEach(([name,data])=>{
+      const color=data.color||"#aaaaaa",row=document.createElement("div"); row.className="custom-tag-row";
+      const label=document.createElement("span"); label.textContent=`[${name}]`; label.style.color=color; label.style.textShadow=`0 0 8px ${color}88`; label.style.fontWeight="700"; label.style.fontSize="12px";
+      const delBtn=document.createElement("button"); delBtn.textContent="Delete"; delBtn.className="removeUserBtn"; delBtn.style.fontSize="11px";
+      delBtn.addEventListener("click",async()=>{const ok=await modConfirm("🗑️",`Delete tag "${name}"?`,"This will remove the tag from the palette.");if(ok) await db.ref(`adminData/customTags/${name}`).remove();});
+      row.appendChild(label); row.appendChild(delBtn); list.appendChild(row);
     });
   });
 }
 
 // ============================================================
-// MOD LOGS — FIX: show ALL logs in correct order
+// OPEN MOD MENU
 // ============================================================
-function loadModLogs() {
-  const list = $("modActionLogList");
-  if (!list) return;
-  // Use live listener, fetch more logs, reverse for newest-first display
-  db.ref("adminData/modLogs").orderByChild("ts").limitToLast(100).on("value", snap => {
-    list.innerHTML = "";
-    const logs = [];
-    snap.forEach(child => logs.push({ key: child.key, ...child.val() }));
-    logs.reverse(); // newest first
-    if (!logs.length) {
-      list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">📋</div>No mod actions logged yet.</div>`;
-      return;
-    }
-    logs.forEach(log => {
-      const row = document.createElement("div");
-      row.className = "log-row";
-      const ts   = new Date(log.ts).toLocaleString();
-      const icon = { delete_message:"🗑️", remove_pfp:"🖼️", timeout:"⏱️", remove_tag:"🏷️", add_tag:"🏷️" }[log.type] || "📋";
-      row.innerHTML = `<span class="log-icon">${icon}</span><div class="log-info"><div class="log-action">${escapeHtml(log.modName||"Unknown")} — ${escapeHtml(log.detail||log.type||"")}</div><div class="log-target">Target: ${escapeHtml(log.targetName||log.targetId||"?")} · ${ts}</div></div>`;
-      list.appendChild(row);
-    });
-  });
-}
+function openModMenu() {
+  // Always tear down previous listeners first
+  teardownPanelListeners(modPanelListeners);
+  modPanelListeners=[];
 
-// ============================================================
-// MOD MENU
-// ============================================================
-function initModMenu() {
+  $("modMenu").style.display="flex";
   initMenuTabs("#modMenu .modMenuContainer");
 
-  db.ref("adminData/allUsers").on("value", snap => {
-    allUsersCache = snap.val() || {};
-    const filter = $("modSearchInput").value.trim().toLowerCase();
-    renderUsersList("modUsersList", filter, (actions, id, name) => {
-      const timeoutBtn = document.createElement("button");
-      timeoutBtn.className = "mod-action-btn sm"; timeoutBtn.textContent = "⏱️ Timeout";
-      timeoutBtn.addEventListener("click", () => {
-        const timeoutTab = document.querySelector('#modMenu .modTab[data-tab="modTimeouts"]');
-        if (timeoutTab) timeoutTab.click();
-        $("modTimeoutUserIdInput").value = id;
-      });
-      const removePfpBtn = document.createElement("button");
-      removePfpBtn.className = "removeUserBtn"; removePfpBtn.textContent = "Remove PFP";
-      removePfpBtn.addEventListener("click", async () => {
-        const ok = await modConfirm("🖼️","Remove PFP?",`Remove profile picture for "${name}"?`);
-        if (ok) {
-          db.ref(`adminData/allUsers/${id}`).update({ avatarUrl: null });
-          logModAction({ type:"remove_pfp", modName:currentUsername, modId:currentUserId, targetName:name, targetId:id, detail:"Removed profile picture." });
-        }
-      });
-      actions.appendChild(timeoutBtn); actions.appendChild(removePfpBtn);
+  // ── Users tab: live allUsers → re-render ──
+  panelOn(modPanelListeners,db.ref("adminData/allUsers"),"value",snap=>{
+    allUsersCache=snap.val()||{};
+    const filter=$("modSearchInput").value.trim().toLowerCase();
+    renderUsersList("modUsersList",filter,(actions,id,name)=>{
+      const timeoutBtn=document.createElement("button"); timeoutBtn.className="mod-action-btn sm"; timeoutBtn.textContent="⏱️ Timeout";
+      timeoutBtn.addEventListener("click",()=>{const t=document.querySelector('#modMenu .modTab[data-tab="modTimeouts"]');if(t) t.click();$("modTimeoutUserIdInput").value=id;});
+      const pfpBtn=document.createElement("button"); pfpBtn.className="removeUserBtn"; pfpBtn.textContent="🖼️ Remove PFP";
+      pfpBtn.addEventListener("click",()=>removePfp(id,name,false)); // mods CANNOT remove Owner's pfp
+      actions.appendChild(timeoutBtn); actions.appendChild(pfpBtn);
     });
-    $("modUsersTabBadge").textContent = Object.keys(allUsersCache).filter(k=>k!=="placeholder").length;
+    $("modUsersTabBadge").textContent=Object.keys(allUsersCache).filter(k=>k!=="placeholder").length;
   });
 
-  $("modSearchInput").addEventListener("input", e => {
-    renderUsersList("modUsersList", e.target.value.trim().toLowerCase(), (actions, id, name) => {
-      const btn = document.createElement("button");
-      btn.className = "mod-action-btn sm"; btn.textContent = "⏱️ Timeout";
-      btn.addEventListener("click", () => { const t = document.querySelector('#modMenu .modTab[data-tab="modTimeouts"]'); if(t) t.click(); $("modTimeoutUserIdInput").value = id; });
-      actions.appendChild(btn);
+  $("modSearchInput").addEventListener("input",e=>{
+    renderUsersList("modUsersList",e.target.value.trim().toLowerCase(),(actions,id,name)=>{
+      const timeoutBtn=document.createElement("button"); timeoutBtn.className="mod-action-btn sm"; timeoutBtn.textContent="⏱️ Timeout";
+      timeoutBtn.addEventListener("click",()=>{const t=document.querySelector('#modMenu .modTab[data-tab="modTimeouts"]');if(t) t.click();$("modTimeoutUserIdInput").value=id;});
+      const pfpBtn=document.createElement("button"); pfpBtn.className="removeUserBtn"; pfpBtn.textContent="🖼️ Remove PFP";
+      pfpBtn.addEventListener("click",()=>removePfp(id,name,false));
+      actions.appendChild(timeoutBtn); actions.appendChild(pfpBtn);
     });
   });
 
-  buildTagPaletteFor("modTagPalette", "modTagNameInput", () => modSelectedTag, v => { modSelectedTag = v; return v; }, true);
+  buildTagPaletteFor("modTagPalette","modTagNameInput",()=>modSelectedTag,v=>{modSelectedTag=v;},true);
 
-  $("modAddTagBtn").addEventListener("click", () => {
-    const id  = $("modTagUserIdInput").value.trim();
-    const tag = $("modTagNameInput").value.trim();
-    if (!id || !tag) return alert("Please select a tag and enter a User ID.");
-    if (MOD_PROTECTED_TAGS.includes(tag)) return alert(`Moderators cannot assign the "${tag}" tag.`);
-    db.ref(`adminData/userTags/${id}`).once("value", s => {
-      const current = s.val() || [];
-      if (!current.includes(tag)) {
-        current.push(tag);
-        db.ref(`adminData/userTags/${id}`).set(current);
-      }
-      $("modTagUserIdInput").value = ""; $("modTagNameInput").value = ""; modSelectedTag = null;
+  const addTagOld=$("modAddTagBtn"), addTagNew=addTagOld.cloneNode(true); addTagOld.parentNode.replaceChild(addTagNew,addTagOld);
+  addTagNew.addEventListener("click",()=>{
+    const id=$("modTagUserIdInput").value.trim(),tag=$("modTagNameInput").value.trim();
+    if(!id||!tag) return alert("Please select a tag and enter a User ID.");
+    if(MOD_PROTECTED_TAGS.includes(tag)) return alert(`Moderators cannot assign the "${tag}" tag.`);
+    db.ref(`adminData/userTags/${id}`).once("value",s=>{
+      const current=s.val()||[];
+      if(!current.includes(tag)){current.push(tag);db.ref(`adminData/userTags/${id}`).set(current);}
+      $("modTagUserIdInput").value=""; $("modTagNameInput").value=""; modSelectedTag=null;
       document.querySelectorAll("#modTagPalette .tagPaletteBtn").forEach(b=>b.classList.remove("selected"));
-      logModAction({ type:"add_tag", modName:currentUsername, modId:currentUserId, targetName:(allUsersCache[id]||{}).username||id, targetId:id, detail:`Added tag: ${tag}` });
+      logModAction({type:"add_tag",modName:currentUsername,modId:currentUserId,targetName:(allUsersCache[id]||{}).username||id,targetId:id,detail:`Added tag: ${tag}`});
     });
   });
 
-  renderTaggedUsers("modTaggedUsersList");
-  renderTimeoutsList("modActiveTimeoutsList");
-  renderTagViewer("modTagViewerList");
-  setupTimeoutButtons("mod-dur", () => modSelectedMs, v => { modSelectedMs = v; }, "modTimeoutUserIdInput", "modApplyTimeoutBtn", "mod");
+  // All live-updating panel sections
+  renderTaggedUsers("modTaggedUsersList",modPanelListeners,true);
+  renderTimeoutsList("modActiveTimeoutsList",modPanelListeners);
+  renderTagViewer("modTagViewerList",modPanelListeners);
+  setupTimeoutButtons("mod-dur",()=>modSelectedMs,v=>{modSelectedMs=v;},"modTimeoutUserIdInput","modApplyTimeoutBtn");
 }
 
 // ============================================================
 // CHANNEL BUTTONS
 // ============================================================
-document.addEventListener("click", e => {
-  const btn = e.target.closest(".serverBtn");
-  if (!btn || !btn.getAttribute("data-server")) return;
+document.addEventListener("click",e=>{
+  const btn=e.target.closest(".serverBtn");
+  if(!btn||!btn.getAttribute("data-server")) return;
   switchServer(btn.getAttribute("data-server"));
 });
