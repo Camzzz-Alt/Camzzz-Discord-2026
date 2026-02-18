@@ -42,6 +42,8 @@ let availableTags = Object.keys(BUILTIN_TAG_STYLES);
 
 const PRIVATE_CHANNEL_TAG = "Private Channel Access";
 const MOD_TAGS = ["Mod", "Admin", "Owner"];
+// Tags mods cannot add or remove (only admins/owners can touch these)
+const MOD_PROTECTED_TAGS = ["Mod", "Admin", "Owner", "Dev", "VIP"];
 
 // ============================================================
 // STATE
@@ -541,21 +543,32 @@ function updateUserPanel() {
   $("sidebarUsername").textContent = currentUsername;
   $("sidebarUsername").style.color = myColor;
   updateSidebarAvatar();
-  const tagsDiv = $("sidebarUserTags");
-  tagsDiv.innerHTML = "";
-  myTags.forEach(tag => {
-    const span = document.createElement("span");
-    span.className = "sidebar-tag-pill";
-    applyTagStyleToEl(span, tag);
-    span.textContent = tag;
-    const s = getTagStyle(tag);
-    if (s.rainbow) {
-      span.style.background = "linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";
-      span.style.borderColor = "rgba(255,100,100,0.3)";
-      span.style.color = "#fff";
-    }
-    tagsDiv.appendChild(span);
-  });
+
+  // Tags in their own sidebar section (under text size)
+  const tagsSection = $("sidebarTagsSection");
+  tagsSection.innerHTML = "";
+  if (myTags.length > 0) {
+    const label = document.createElement("div");
+    label.className = "sidebar-section-label sub";
+    label.textContent = "YOUR TAGS";
+    tagsSection.appendChild(label);
+    const pillsWrap = document.createElement("div");
+    pillsWrap.className = "sidebar-tags-wrap";
+    myTags.forEach(tag => {
+      const span = document.createElement("span");
+      span.className = "sidebar-tag-pill";
+      applyTagStyleToEl(span, tag);
+      span.textContent = tag;
+      const s = getTagStyle(tag);
+      if (s.rainbow) {
+        span.style.background = "linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";
+        span.style.borderColor = "rgba(255,100,100,0.3)";
+        span.style.color = "#fff";
+      }
+      pillsWrap.appendChild(span);
+    });
+    tagsSection.appendChild(pillsWrap);
+  }
 }
 
 function updateSidebarAvatar() {
@@ -842,31 +855,39 @@ function switchServer(serverName) {
 
   const ref = db.ref(`messages/${serverName}`);
 
-  // Load existing messages first, THEN attach live listener
-  ref.orderByChild("timestamp").once("value", snap => {
-    const msgs = [];
-    snap.forEach(child => msgs.push({ key: child.key, ...child.val() }));
+  // Pre-fetch messages AND all user tags in parallel — no async inside render loop
+  Promise.all([
+    ref.orderByChild("timestamp").once("value"),
+    db.ref("adminData/userTags").once("value")
+  ]).then(([msgSnap, tagsSnap]) => {
+    if (currentServer !== serverName) return; // user switched away
 
-    // Clear dedup set for this server to avoid stale keys preventing renders
+    const allTags = tagsSnap.val() || {};
+    const msgs = [];
+    msgSnap.forEach(child => msgs.push({ key: child.key, ...child.val() }));
+
+    // Re-reset dedup set right before rendering (guards against double-calls)
     displayedMessages[serverName] = new Set();
 
     msgs.forEach(data => {
       if (displayedMessages[serverName].has(data.key)) return;
       displayedMessages[serverName].add(data.key);
-      addMessageToChat(data, serverName, false);
+      renderMessage(data, serverName, false, allTags[data.userId] || []);
     });
 
     scrollToBottom();
 
-    // Only listen for messages AFTER the current timestamp
-    const since = Date.now();
-    const listener = ref.orderByChild("timestamp").startAt(since).on("child_added", snapshot => {
+    // Live listener for new messages — simple child_added, dedup Set handles duplicates
+    const listener = ref.on("child_added", snapshot => {
       if (currentServer !== serverName) return;
       const key  = snapshot.key;
       const data = snapshot.val();
-      if (displayedMessages[serverName].has(key)) return;
+      if (displayedMessages[serverName].has(key)) return; // already rendered on initial load
       displayedMessages[serverName].add(key);
-      addMessageToChat({ key, ...data }, serverName, true);
+      db.ref(`adminData/userTags/${data.userId}`).once("value", tSnap => {
+        if (currentServer !== serverName) return;
+        renderMessage({ key, ...data }, serverName, true, tSnap.val() || []);
+      });
     });
 
     dbListeners[serverName] = { ref, listener };
@@ -918,19 +939,17 @@ function scrollToBottom() {
 }
 
 // ============================================================
-// RENDER MESSAGE — FIXED (data-timestamp on wrapper)
+// RENDER MESSAGE
+// tags param is pre-fetched — NO async DB calls inside this function
 // ============================================================
-function addMessageToChat(data, serverName, isNew) {
+function renderMessage(data, serverName, isNew, tags) {
   const { key: messageId, name, message, time, userId: senderId, color, timestamp = 0, replyTo, avatarUrl } = data;
 
   if (serverName === "private" && !myTags.includes(PRIVATE_CHANNEL_TAG) && !myTags.includes("Owner") && !myTags.includes("Admin")) return;
   if (serverName === "modchat"  && !myTags.some(t => MOD_TAGS.includes(t))) return;
 
   const isMine = senderId === currentUserId;
-
-  db.ref(`adminData/userTags/${senderId}`).once("value", snap => {
-    const tags = snap.val() || [];
-    const nameColor = color || "#ffffff";
+  const nameColor = color || "#ffffff";
 
     const msgDiv = document.createElement("div");
     msgDiv.classList.add("message", isMine ? "mine" : "other");
@@ -1100,7 +1119,6 @@ function addMessageToChat(data, serverName, isNew) {
         $("scrollToBottomBtn").style.display = "flex";
       }
     }
-  });
 }
 
 // ============================================================
@@ -1285,11 +1303,12 @@ function initMenuTabs(containerSelector) {
   });
 }
 
-function buildTagPaletteFor(containerId, inputId, selectedVar, setSelected) {
+function buildTagPaletteFor(containerId, inputId, selectedVar, setSelected, isMod = false) {
   const palette = $(containerId);
   if (!palette) return;
   palette.innerHTML = "";
-  availableTags.forEach(tag => {
+  const tagsToShow = isMod ? availableTags.filter(t => !MOD_PROTECTED_TAGS.includes(t)) : availableTags;
+  tagsToShow.forEach(tag => {
     const btn = document.createElement("button");
     btn.className   = "tagPaletteBtn";
     btn.textContent = tag;
@@ -1315,8 +1334,8 @@ function buildTagPaletteFor(containerId, inputId, selectedVar, setSelected) {
 }
 
 function refreshTagPalettes() {
-  buildTagPaletteFor("adminTagPalette", "adminTagNameInput", () => adminSelectedTag, v => { adminSelectedTag = v; return v; });
-  buildTagPaletteFor("modTagPalette",   "modTagNameInput",   () => modSelectedTag,   v => { modSelectedTag = v; return v; });
+  buildTagPaletteFor("adminTagPalette", "adminTagNameInput", () => adminSelectedTag, v => { adminSelectedTag = v; return v; }, false);
+  buildTagPaletteFor("modTagPalette",   "modTagNameInput",   () => modSelectedTag,   v => { modSelectedTag = v; return v; }, true);
 }
 
 function renderUsersList(listId, filter, actionsBuilder) {
@@ -1362,7 +1381,7 @@ function renderTaggedUsers(listId) {
   const list = $(listId);
   if (!list) return;
   list.innerHTML = "";
-  db.ref("adminData/userTags").once("value", snap => {
+  db.ref("adminData/userTags").on("value", snap => {
     const allTags = snap.val() || {};
     const entries = Object.entries(allTags).filter(([id]) => id !== "placeholder");
     if (!entries.length) { list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🏷️</div>No tagged users yet.</div>`; return; }
@@ -1392,6 +1411,12 @@ function renderTaggedUsers(listId) {
         const del   = document.createElement("button");
         del.className = "tagPillDelete"; del.textContent = "✕";
         del.addEventListener("click", async () => {
+          // Mods cannot remove protected tags
+          const isMod = myTags.includes("Mod") && !myTags.includes("Admin") && !myTags.includes("Owner");
+          if (isMod && MOD_PROTECTED_TAGS.includes(tag)) {
+            alert(`Moderators cannot remove the "${tag}" tag.`);
+            return;
+          }
           const ok = await modConfirm("🏷️",`Remove "${tag}"?`,`Remove ${tag} tag from ${name}?`);
           if (!ok) return;
           db.ref(`adminData/userTags/${id}`).once("value", s => {
@@ -1539,7 +1564,12 @@ function initAdminMenu() {
     if (!id || !tag) return alert("Please select a tag and enter a User ID.");
     db.ref(`adminData/userTags/${id}`).once("value", s => {
       const current = s.val() || [];
-      if (!current.includes(tag)) { current.push(tag); db.ref(`adminData/userTags/${id}`).set(current); }
+      if (!current.includes(tag)) {
+        current.push(tag);
+        db.ref(`adminData/userTags/${id}`).set(current).then(() => {
+          renderTaggedUsers("adminTaggedUsersList"); // refresh display
+        });
+      }
       $("adminTagUserIdInput").value = ""; $("adminTagNameInput").value = ""; adminSelectedTag = null;
       document.querySelectorAll("#adminTagPalette .tagPaletteBtn").forEach(b=>b.classList.remove("selected"));
     });
@@ -1699,15 +1729,21 @@ function initModMenu() {
     });
   });
 
-  buildTagPaletteFor("modTagPalette", "modTagNameInput", () => modSelectedTag, v => { modSelectedTag = v; return v; });
+  buildTagPaletteFor("modTagPalette", "modTagNameInput", () => modSelectedTag, v => { modSelectedTag = v; return v; }, true);
 
   $("modAddTagBtn").addEventListener("click", () => {
     const id  = $("modTagUserIdInput").value.trim();
     const tag = $("modTagNameInput").value.trim();
     if (!id || !tag) return alert("Please select a tag and enter a User ID.");
+    if (MOD_PROTECTED_TAGS.includes(tag)) return alert(`Moderators cannot assign the "${tag}" tag.`);
     db.ref(`adminData/userTags/${id}`).once("value", s => {
       const current = s.val() || [];
-      if (!current.includes(tag)) { current.push(tag); db.ref(`adminData/userTags/${id}`).set(current); }
+      if (!current.includes(tag)) {
+        current.push(tag);
+        db.ref(`adminData/userTags/${id}`).set(current).then(() => {
+          renderTaggedUsers("modTaggedUsersList"); // refresh display
+        });
+      }
       $("modTagUserIdInput").value = ""; $("modTagNameInput").value = ""; modSelectedTag = null;
       document.querySelectorAll("#modTagPalette .tagPaletteBtn").forEach(b=>b.classList.remove("selected"));
       logModAction({ type:"add_tag", modName:currentUsername, modId:currentUserId, targetName:(allUsersCache[id]||{}).username||id, targetId:id, detail:`Added tag: ${tag}` });
