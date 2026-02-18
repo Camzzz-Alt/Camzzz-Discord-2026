@@ -598,26 +598,27 @@ function switchServer(serverName) {
   channelName.textContent = label;
   msgInput.placeholder    = `Message #${label}`;
 
-  // Load full history first
+  // 1. Load message history first (sorted)
   dbRef.orderByChild("timestamp").once("value", snap => {
-    const msgs   = snap.val() || {};
+    const msgs = snap.val() || {};
     const sorted = Object.entries(msgs).sort((a,b) => (a[1].timestamp||0) - (b[1].timestamp||0));
+    
     sorted.forEach(([key, data]) => {
       if (displayedMessages.has(key)) return;
       displayedMessages.add(key);
-      addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key);
+      // We pass data.timestamp here so the sorting works
+      addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key, data.timestamp);
     });
 
-// Then listen for brand-new messages
+    // 2. Then listen for brand-new incoming messages
     const since = Date.now();
     dbListener = dbRef.orderByChild("timestamp").startAt(since).on("child_added", snapshot => {
       const key  = snapshot.key;
       const data = snapshot.val();
       if (displayedMessages.has(key) || (data.timestamp || 0) < since) return;
       displayedMessages.add(key);
-      
-      // Add message, then ensuring sorting
-      const element = addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key, data.timestamp);
+      // We pass data.timestamp here as well
+      addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key, data.timestamp);
     });
   });
 }
@@ -641,15 +642,15 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
     const msgDiv = document.createElement("div");
     msgDiv.classList.add("message", isMine ? "mine" : "other");
     msgDiv.setAttribute("data-message-id", messageId);
-    msgDiv.setAttribute("data-timestamp", timestamp); // Store timestamp for sorting
+    msgDiv.setAttribute("data-timestamp", timestamp); // Essential for sorting
     
-    // Fix color readability for "mine" messages
+    // Fix: This ensures the username uses the specific color chosen
     const nameColor = color || "#ffffff";
     
     msgDiv.innerHTML = `
       <div class="msg-header">
         ${tagHTML}
-        <span class="username" style="color:${nameColor}">${escapeHtml(name)}</span>
+        <span class="username" style="color:${nameColor} !important">${escapeHtml(name)}</span>
         <span class="time">${time}</span>
       </div>
       <span class="text">${message}</span>
@@ -684,7 +685,7 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
       picker.style.display = picker.style.display === "none" ? "flex" : "none";
     });
 
-    // Live reaction counts
+    // Live reaction counts + Auto-scroll logic
     db.ref(`messages/${currentServer}/${messageId}/reactions`).on("value", snap => {
       const reactions   = snap.val() || {};
       const reactionDiv = msgDiv.querySelector(".reactions");
@@ -703,34 +704,32 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
         });
         reactionDiv.appendChild(span);
       });
+
+      // AUTO-SCROLL FOR REACTIONS:
+      // If we are already near the bottom, scroll down to keep the message in frame
+      const isNearBottom = chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 150;
+      if (isNearBottom) {
+        chatbox.scrollTop = chatbox.scrollHeight;
+      }
     });
 
-    // INTELLIGENT INSERTION (Fixes order bug)
+    // INTELLIGENT INSERTION (Sorts messages by timestamp)
     const allMsgs = Array.from(chatbox.children);
     if (allMsgs.length === 0) {
       chatbox.appendChild(msgDiv);
     } else {
       let inserted = false;
-      // Search from bottom up
       for (let i = allMsgs.length - 1; i >= 0; i--) {
         const existingTime = parseInt(allMsgs[i].getAttribute("data-timestamp") || "0");
         if (existingTime <= timestamp) {
-          if (allMsgs[i].nextSibling) {
-            chatbox.insertBefore(msgDiv, allMsgs[i].nextSibling);
-          } else {
-            chatbox.appendChild(msgDiv);
-          }
+          chatbox.insertBefore(msgDiv, allMsgs[i].nextSibling);
           inserted = true;
           break;
         }
       }
-      // If it's the oldest message
-      if (!inserted) {
-        chatbox.insertBefore(msgDiv, chatbox.firstChild);
-      }
+      if (!inserted) chatbox.insertBefore(msgDiv, chatbox.firstChild);
     }
     
-    // Auto scroll if near bottom
     chatbox.scrollTop = chatbox.scrollHeight;
     return msgDiv;
   });
