@@ -1064,25 +1064,19 @@ addTagBtn.addEventListener("click", () => {
 });
 
 // ============================================================
-// CHANNEL CLICK HANDLERS
+// CHANNEL SWITCHING CLICK HANDLERS
 // ============================================================
 document.addEventListener("click", (e) => {
-  // Check if the clicked element (or its parent) is a server/channel button
+  // Find if the clicked element is a channel button (or inside one)
   const btn = e.target.closest(".serverBtn");
   
   if (btn) {
-    const targetServer = btn.getAttribute("data-server");
-    const friendlyName = btn.textContent.trim().replace("#", "");
-
-    // 1. Switch the Firebase listener to the new server
+    const targetServer = btn.getAttribute("data-server"); // e.g., "server2"
+    
+    // 1. Run your existing switching logic
     switchServer(targetServer);
-
-    // 2. Update the UI header name
-    if (channelName) {
-      channelName.textContent = friendlyName;
-    }
-
-    // 3. Update active button styling
+    
+    // 2. Visual feedback: update the "selected" class
     document.querySelectorAll(".serverBtn").forEach(b => b.classList.remove("selected"));
     btn.classList.add("selected");
   }
