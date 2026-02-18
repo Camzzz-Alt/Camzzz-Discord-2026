@@ -1062,3 +1062,28 @@ addTagBtn.addEventListener("click", () => {
     tagNameInput.value   = "";
   });
 });
+
+// ============================================================
+// CHANNEL CLICK HANDLERS
+// ============================================================
+document.addEventListener("click", (e) => {
+  // Check if the clicked element (or its parent) is a server/channel button
+  const btn = e.target.closest(".serverBtn");
+  
+  if (btn) {
+    const targetServer = btn.getAttribute("data-server");
+    const friendlyName = btn.textContent.trim().replace("#", "");
+
+    // 1. Switch the Firebase listener to the new server
+    switchServer(targetServer);
+
+    // 2. Update the UI header name
+    if (channelName) {
+      channelName.textContent = friendlyName;
+    }
+
+    // 3. Update active button styling
+    document.querySelectorAll(".serverBtn").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+  }
+});
