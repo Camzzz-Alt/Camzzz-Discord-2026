@@ -243,14 +243,21 @@ googleUsernameConfirmBtn.addEventListener("click", async () => {
     if (!available) return showError(googleUsernameError, "That username is already taken.");
     if (!pendingGoogleUser) return showError(googleUsernameError, "Something went wrong. Please try again.");
 
-    await db.ref(`adminData/allUsers/${pendingGoogleUser.uid}`).set({
+await db.ref(`adminData/allUsers/${pendingGoogleUser.uid}`).set({
       username: name,
       usernameColor: "#5865f2",
       lastUsernameChange: 0,
       email: pendingGoogleUser.email || ""
     });
+
+    // Manually transition to the app state
+    currentUser   = pendingGoogleUser;
+    currentUserId = pendingGoogleUser.uid;
     pendingGoogleUser = null;
-    // onAuthStateChanged will now fire and start the app
+
+    // Hide auth and start the app immediately
+    authScreen.style.display = "none";
+    startApp();
   });
 });
 
