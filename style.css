@@ -347,6 +347,8 @@ input, button, textarea, select { font-family: 'Montserrat', sans-serif; }
   border-color: var(--border-hover); background: var(--bg-input); transform: translateX(3px);
 }
 
+#tabAdminUsers, #tabModUsers { padding: 14px 16px; }
+
 .modUserInfo { flex: 1; min-width: 0; }
 .modUserName {
   font-size: 13px; font-weight: 700; overflow: hidden;
@@ -649,14 +651,6 @@ input, button, textarea, select { font-family: 'Montserrat', sans-serif; }
   transition: transform var(--transition), box-shadow var(--transition);
 }
 .user-avatar-wrap:hover .user-avatar { transform: scale(1.1); box-shadow: 0 0 14px var(--accent-glow); }
-
-.avatar-upload-overlay {
-  position: absolute; inset: 0; border-radius: 50%;
-  background: rgba(0,0,0,0.65); display: flex; align-items: center;
-  justify-content: center; font-size: 14px; opacity: 0;
-  transition: opacity var(--transition); pointer-events: none;
-}
-.user-avatar-wrap:hover .avatar-upload-overlay { opacity: 1; }
 .user-avatar-wrap.uploading .user-avatar { animation: loadingPulse 0.8s ease-in-out infinite; }
 
 .sidebar-user-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
@@ -734,13 +728,30 @@ input, button, textarea, select { font-family: 'Montserrat', sans-serif; }
 .message.other { background: var(--bg-lighter); border-bottom-left-radius: 4px; }
 .message.mentioned { background: rgba(255,215,0,0.07); border: 1px solid rgba(255,215,0,0.18); }
 
-/* Tags above username inside bubble */
+/* ========== TAGS — RESTORED GLOW STYLE ========== */
 .msg-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
 
-.tag-pill-inline { font-size: 10px; font-weight: 800; letter-spacing: 0.04em; }
+.tag-glow { font-weight: 800; font-size: 11px; }
+
+/* Individual tag classes with glow — same as old version */
+.tag-inline            { font-weight: 800; font-size: 11px; letter-spacing: 0.03em; }
+.tag-mod               { color: #ff4444; text-shadow: 0 0 8px #ff4444aa; }
+.tag-admin             { color: #ff9900; text-shadow: 0 0 8px #ff9900aa; }
+.tag-sn                { color: #5b8aff; text-shadow: 0 0 8px #5b8affaa; }
+.tag-vip               { color: #ffd700; text-shadow: 0 0 8px #ffd700aa; }
+.tag-friend            { color: #57f287; text-shadow: 0 0 8px #57f287aa; }
+.tag-tester            { color: #00ffff; text-shadow: 0 0 8px #00ffffaa; }
+.tag-owner             { color: #ffffff; text-shadow: 0 0 8px #ffffffaa; }
+.tag-dev               { color: #888888; text-shadow: 0 0 8px #888888aa; }
+.tag-jobless           { color: #a0522d; text-shadow: 0 0 8px #a0522daa; }
+.tag-asked-for-tag     { color: #808080; text-shadow: 0 0 8px #808080aa; }
+.tag-67                { color: #ff69b4; text-shadow: 0 0 8px #ff69b4aa; }
+.tag-private-channel-access { color: #a78bfa; text-shadow: 0 0 8px #a78bfaaa; }
 .tag-gay {
   background: linear-gradient(to right, #ff4444, #ff9900, #57f287, #5b8aff, #c084fc);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .message .msg-header { display: flex; align-items: baseline; gap: 7px; margin-bottom: 3px; flex-wrap: wrap; }
@@ -819,7 +830,7 @@ input, button, textarea, select { font-family: 'Montserrat', sans-serif; }
 }
 #typingText { font-size: 11px; color: var(--text-dim); font-weight: 600; font-style: italic; }
 
-/* ========== SCROLL TO BOTTOM PILL ========== */
+/* ========== SCROLL TO BOTTOM ========== */
 .scroll-to-bottom {
   position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
   background: var(--accent); color: white; padding: 7px 18px; border-radius: 20px;
@@ -860,16 +871,14 @@ input, button, textarea, select { font-family: 'Montserrat', sans-serif; }
 #usernameChangeSaveBtn {
   padding: 9px 15px; background: var(--accent); border: none; border-radius: var(--radius);
   color: white; font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0;
-  font-family: 'Montserrat', sans-serif;
-  transition: background var(--transition), transform 0.15s;
+  font-family: 'Montserrat', sans-serif; transition: background var(--transition), transform 0.15s;
 }
 #usernameChangeSaveBtn:hover { background: var(--accent-hover); transform: scale(1.04); }
 #usernameChangeSaveBtn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 #usernameChangeCancelBtn {
   padding: 9px 15px; background: var(--bg-lighter); border: none; border-radius: var(--radius);
   color: var(--text-muted); font-weight: 600; font-size: 13px; cursor: pointer; flex-shrink: 0;
-  font-family: 'Montserrat', sans-serif;
-  transition: background var(--transition), color var(--transition);
+  font-family: 'Montserrat', sans-serif; transition: background var(--transition), color var(--transition);
 }
 #usernameChangeCancelBtn:hover { background: var(--bg-input); color: var(--text-primary); }
 
