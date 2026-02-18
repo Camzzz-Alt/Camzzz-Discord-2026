@@ -14,348 +14,326 @@
 </head>
 <body>
 
-  <!-- ========== AUTH SCREEN ========== -->
-  <div id="authScreen">
-    <div class="auth-bg-grid"></div>
+<!-- ========== AUTH SCREEN ========== -->
+<div id="authScreen">
+  <div class="auth-bg-grid"></div>
+  <div class="auth-card" id="loginCard">
+    <div class="auth-logo"><img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo"><span>Camzzz's Discord</span></div>
+    <h2>Welcome back</h2>
+    <p class="auth-subtitle">Sign in to continue chatting</p>
+    <button id="googleSignInBtn" class="google-btn">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      Continue with Google
+    </button>
+    <div class="auth-divider"><span>or</span></div>
+    <div class="auth-field"><label>Email</label><input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email"></div>
+    <div class="auth-field"><label>Password</label><input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    <p id="loginError" class="auth-error"></p>
+    <button id="loginBtn" class="auth-btn">Sign In</button>
+    <p class="auth-switch">No account? <a id="showSignupBtn" href="#">Create one</a></p>
+    <p id="verifyNotice" class="verify-notice" style="display:none;">📧 Verify your email first. <a id="resendVerifyBtn" href="#">Resend</a></p>
+  </div>
+  <div class="auth-card" id="signupCard" style="display:none;">
+    <div class="auth-logo"><img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo"><span>Camzzz's Discord</span></div>
+    <h2>Create account</h2>
+    <p class="auth-subtitle">Join the server</p>
+    <button id="googleSignUpBtn" class="google-btn">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      Sign up with Google
+    </button>
+    <div class="auth-divider"><span>or</span></div>
+    <div class="auth-field"><label>Username</label><input id="signupUsername" type="text" placeholder="CoolUsername" maxlength="24"><span id="usernameCheck" class="field-hint"></span></div>
+    <div class="auth-field"><label>Email</label><input id="signupEmail" type="email" placeholder="you@example.com"></div>
+    <div class="auth-field"><label>Password</label><input id="signupPassword" type="password" placeholder="At least 6 characters"></div>
+    <p id="signupError" class="auth-error"></p>
+    <button id="signupBtn" class="auth-btn">Create Account</button>
+    <p class="auth-switch">Already have one? <a id="showLoginBtn" href="#">Sign in</a></p>
+  </div>
+  <div class="auth-card" id="googleUsernameCard" style="display:none;">
+    <div class="auth-logo"><img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo"><span>Camzzz's Discord</span></div>
+    <h2>Pick a username</h2>
+    <p class="auth-subtitle">How you'll appear in chat.</p>
+    <div class="auth-field"><label>Username</label><input id="googleUsername" type="text" placeholder="CoolUsername" maxlength="24"><span id="googleUsernameCheck" class="field-hint"></span></div>
+    <p id="googleUsernameError" class="auth-error"></p>
+    <button id="googleUsernameConfirmBtn" class="auth-btn">Let's go →</button>
+  </div>
+  <div class="auth-card" id="verifyCard" style="display:none;">
+    <div class="auth-logo"><img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo"><span>Camzzz's Discord</span></div>
+    <h2>Check your email</h2>
+    <p class="auth-subtitle">We sent a link to <strong id="verifyEmailAddr"></strong>.</p>
+    <button id="resendVerifyBtn2" class="auth-btn" style="margin-top:8px;">Resend Email</button>
+    <p class="auth-switch"><a id="backToLoginBtn" href="#">← Back to sign in</a></p>
+  </div>
+</div>
 
-    <!-- LOGIN CARD -->
-    <div class="auth-card" id="loginCard">
-      <div class="auth-logo">
-        <img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
+<!-- ========== ADMIN PASSWORD GATE ========== -->
+<div id="adminMenuPasswordGate" style="display:none;">
+  <div class="gateCard">
+    <div class="gateLogo">🛡️ Admin Access</div>
+    <h2>Admin Login</h2>
+    <p class="gateSubtitle">Enter the admin password.</p>
+    <div class="inputRow">
+      <input id="adminMenuPasswordInput" type="password" placeholder="Admin password" autocomplete="off">
+      <button id="adminMenuEnterBtn">Enter</button>
+    </div>
+    <p id="adminMenuGateMessage" class="gateMessage"></p>
+  </div>
+</div>
+
+<!-- ========== ADMIN MENU ========== -->
+<div id="adminMenu" style="display:none;">
+  <div class="modMenuContainer wide">
+    <div class="modMenuHeader">
+      <div class="modMenuHeaderLeft">
+        <span class="modMenuIcon">🛡️</span>
+        <div><h2>Admin Panel</h2><p class="modMenuSubtitle">Full server administration</p></div>
+      </div>
+      <button id="adminMenuCloseBtn">✕ Close</button>
+    </div>
+    <div class="modSearchBar">
+      <span class="modSearchIcon">🔍</span>
+      <input id="adminSearchInput" type="text" placeholder="Search users by name or ID..." autocomplete="off">
+    </div>
+    <div class="modTabBar">
+      <button class="modTab active" data-tab="adminUsers">👥 Users <span class="modTabBadge" id="adminUsersTabBadge">0</span></button>
+      <button class="modTab" data-tab="adminBans">🚫 Bans <span class="modTabBadge" id="adminBansTabBadge">0</span></button>
+      <button class="modTab" data-tab="adminTags">🏷️ Tags <span class="modTabBadge" id="adminTagsTabBadge">0</span></button>
+      <button class="modTab" data-tab="adminTimeouts">⏱️ Timeouts <span class="modTabBadge" id="adminTimeoutsTabBadge">0</span></button>
+      <button class="modTab" data-tab="adminTagCreate">✨ Create Tag</button>
+      <button class="modTab" data-tab="adminLogs">📋 Logs <span class="modTabBadge" id="adminLogsTabBadge">0</span></button>
+    </div>
+    <div class="modTabContent active" id="tabAdminUsers"><div id="adminUsersList" style="padding:14px 16px;"></div></div>
+    <div class="modTabContent" id="tabAdminBans">
+      <div class="modSectionInner">
+        <label class="modLabel">Ban by User ID</label>
+        <div class="inputRow"><input id="adminBanUserInput" placeholder="User ID"><button id="adminBanUserBtn" class="mod-action-btn danger">🚫 Ban</button></div>
+      </div>
+      <div class="modSectionInner"><label class="modLabel">Currently Banned</label><div id="adminBannedList"></div></div>
+    </div>
+    <div class="modTabContent" id="tabAdminTags">
+      <div class="modSectionInner">
+        <label class="modLabel">Available Tags</label>
+        <div id="adminTagPalette" class="tagPalette"></div>
+      </div>
+      <div class="modSectionInner">
+        <label class="modLabel">Apply Tag</label>
+        <div class="inputRow">
+          <input id="adminTagUserIdInput" placeholder="User ID">
+          <input id="adminTagNameInput" placeholder="Tag (click above)" readonly>
+          <button id="adminAddTagBtn" class="mod-action-btn">➕ Add</button>
+        </div>
+      </div>
+      <div class="modSectionInner"><label class="modLabel">Tagged Users</label><div id="adminTaggedUsersList"></div></div>
+    </div>
+    <div class="modTabContent" id="tabAdminTimeouts">
+      <div class="modSectionInner">
+        <label class="modLabel">Timeout a User</label>
+        <div class="inputRow" style="margin-bottom:12px;"><input id="adminTimeoutUserIdInput" placeholder="User ID"></div>
+        <label class="modLabel">Duration</label>
+        <div class="timeoutDurationGrid">
+          <button class="timeoutDurBtn admin-dur" data-ms="300000">5 min</button>
+          <button class="timeoutDurBtn admin-dur" data-ms="1800000">30 min</button>
+          <button class="timeoutDurBtn admin-dur" data-ms="3600000">1 hour</button>
+          <button class="timeoutDurBtn admin-dur" data-ms="21600000">6 hours</button>
+          <button class="timeoutDurBtn admin-dur" data-ms="86400000">24 hours</button>
+          <button class="timeoutDurBtn admin-dur" data-ms="604800000">1 week</button>
+        </div>
+        <button id="adminApplyTimeoutBtn" class="mod-action-btn" style="margin-top:12px;width:100%;">⏱️ Apply Timeout</button>
+      </div>
+      <div class="modSectionInner"><label class="modLabel">Active Timeouts</label><div id="adminActiveTimeoutsList"></div></div>
+    </div>
+    <div class="modTabContent" id="tabAdminTagCreate">
+      <div class="modSectionInner">
+        <label class="modLabel">Create a New Tag</label>
+        <div style="margin-bottom:12px;">
+          <label class="modLabel" style="margin-bottom:6px;">Tag Name</label>
+          <input id="newTagName" type="text" placeholder="e.g. Legend" maxlength="20" class="mod-input-full">
+        </div>
+        <div style="margin-bottom:14px;">
+          <label class="modLabel" style="margin-bottom:6px;">Tag Color</label>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <input id="newTagColor" type="color" value="#ff69b4" class="color-picker-input">
+            <div id="newTagPreview" class="tag-preview-wrap">
+              <span id="newTagPreviewLabel" class="tag-preview-text">[Preview]</span>
+            </div>
+          </div>
+        </div>
+        <button id="createTagBtn" class="mod-action-btn" style="width:100%;padding:12px;">✨ Create Tag</button>
+        <p id="createTagMsg" class="create-tag-msg"></p>
+      </div>
+      <div class="modSectionInner">
+        <label class="modLabel">Custom Tags</label>
+        <div id="customTagsList"></div>
+      </div>
+    </div>
+    <div class="modTabContent" id="tabAdminLogs">
+      <div class="modSectionInner">
+        <label class="modLabel">Recent Mod Actions</label>
+        <div id="modActionLogList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== MOD MENU ========== -->
+<div id="modMenu" style="display:none;">
+  <div class="modMenuContainer">
+    <div class="modMenuHeader">
+      <div class="modMenuHeaderLeft">
+        <span class="modMenuIcon">⚙️</span>
+        <div><h2>Mod Panel</h2><p class="modMenuSubtitle">Moderator controls</p></div>
+      </div>
+      <button id="modMenuCloseBtn">✕ Close</button>
+    </div>
+    <div class="modSearchBar">
+      <span class="modSearchIcon">🔍</span>
+      <input id="modSearchInput" type="text" placeholder="Search users..." autocomplete="off">
+    </div>
+    <div class="modTabBar">
+      <button class="modTab active" data-tab="modUsers">👥 Users <span class="modTabBadge" id="modUsersTabBadge">0</span></button>
+      <button class="modTab" data-tab="modTags">🏷️ Tags <span class="modTabBadge" id="modTagsTabBadge">0</span></button>
+      <button class="modTab" data-tab="modTimeouts">⏱️ Timeouts <span class="modTabBadge" id="modTimeoutsTabBadge">0</span></button>
+    </div>
+    <div class="modTabContent active" id="tabModUsers"><div id="modUsersList" style="padding:14px 16px;"></div></div>
+    <div class="modTabContent" id="tabModTags">
+      <div class="modSectionInner">
+        <label class="modLabel">Available Tags</label>
+        <div id="modTagPalette" class="tagPalette"></div>
+      </div>
+      <div class="modSectionInner">
+        <label class="modLabel">Apply Tag</label>
+        <div class="inputRow">
+          <input id="modTagUserIdInput" placeholder="User ID">
+          <input id="modTagNameInput" placeholder="Tag (click above)" readonly>
+          <button id="modAddTagBtn" class="mod-action-btn">➕ Add</button>
+        </div>
+      </div>
+      <div class="modSectionInner"><label class="modLabel">Tagged Users</label><div id="modTaggedUsersList"></div></div>
+    </div>
+    <div class="modTabContent" id="tabModTimeouts">
+      <div class="modSectionInner">
+        <label class="modLabel">Timeout a User</label>
+        <div class="inputRow" style="margin-bottom:12px;"><input id="modTimeoutUserIdInput" placeholder="User ID"></div>
+        <label class="modLabel">Duration</label>
+        <div class="timeoutDurationGrid">
+          <button class="timeoutDurBtn mod-dur" data-ms="300000">5 min</button>
+          <button class="timeoutDurBtn mod-dur" data-ms="1800000">30 min</button>
+          <button class="timeoutDurBtn mod-dur" data-ms="3600000">1 hour</button>
+          <button class="timeoutDurBtn mod-dur" data-ms="21600000">6 hours</button>
+          <button class="timeoutDurBtn mod-dur" data-ms="86400000">24 hours</button>
+          <button class="timeoutDurBtn mod-dur" data-ms="604800000">1 week</button>
+        </div>
+        <button id="modApplyTimeoutBtn" class="mod-action-btn" style="margin-top:12px;width:100%;">⏱️ Apply Timeout</button>
+      </div>
+      <div class="modSectionInner"><label class="modLabel">Active Timeouts</label><div id="modActiveTimeoutsList"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== CONFIRM DIALOG ========== -->
+<div id="modConfirmDialog" style="display:none;">
+  <div class="confirmCard">
+    <div class="confirmIcon" id="confirmIcon">⚠️</div>
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmMessage">This action cannot be undone.</p>
+    <div class="confirmBtns">
+      <button id="confirmCancelBtn" class="confirmBtn cancel">Cancel</button>
+      <button id="confirmOkBtn" class="confirmBtn ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- hidden file input -->
+<input type="file" id="avatarFileInput" accept="image/*" style="display:none;">
+
+<!-- ========== LOADING ========== -->
+<div id="loadingScreen" style="display:none;">
+  <div class="loading-content">
+    <img class="loading-logo-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
+    <h2>Loading Chat...</h2>
+    <div id="countdownContainer"><div id="countdownBar"></div></div>
+    <p id="countdownText">3s</p>
+  </div>
+</div>
+
+<!-- ========== MAIN APP ========== -->
+<div id="appContainer" style="display:none;">
+  <div id="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand">
+        <img class="sidebar-logo-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
         <span>Camzzz's Discord</span>
       </div>
-      <h2>Welcome back</h2>
-      <p class="auth-subtitle">Sign in to continue chatting</p>
-      <button id="googleSignInBtn" class="google-btn">
-        <svg width="18" height="18" viewBox="0 0 18 18">
-          <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
-          <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
-          <path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z"/>
-          <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
-        </svg>
-        Continue with Google
-      </button>
-      <div class="auth-divider"><span>or</span></div>
-      <div class="auth-field">
-        <label>Email</label>
-        <input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email">
-      </div>
-      <div class="auth-field">
-        <label>Password</label>
-        <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <p id="loginError" class="auth-error"></p>
-      <button id="loginBtn" class="auth-btn">Sign In</button>
-      <p class="auth-switch">No account? <a id="showSignupBtn" href="#">Create one</a></p>
-      <p id="verifyNotice" class="verify-notice" style="display:none;">
-        📧 Please verify your email first. <a id="resendVerifyBtn" href="#">Resend email</a>
-      </p>
     </div>
-
-    <!-- SIGNUP CARD -->
-    <div class="auth-card" id="signupCard" style="display:none;">
-      <div class="auth-logo">
-        <img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
-        <span>Camzzz's Discord</span>
-      </div>
-      <h2>Create account</h2>
-      <p class="auth-subtitle">Join the server — it's invite-only</p>
-      <button id="googleSignUpBtn" class="google-btn">
-        <svg width="18" height="18" viewBox="0 0 18 18">
-          <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
-          <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
-          <path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z"/>
-          <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
-        </svg>
-        Sign up with Google
-      </button>
-      <div class="auth-divider"><span>or</span></div>
-      <div class="auth-field">
-        <label>Username</label>
-        <input id="signupUsername" type="text" placeholder="CoolUsername" maxlength="24">
-        <span id="usernameCheck" class="field-hint"></span>
-      </div>
-      <div class="auth-field">
-        <label>Email</label>
-        <input id="signupEmail" type="email" placeholder="you@example.com" autocomplete="email">
-      </div>
-      <div class="auth-field">
-        <label>Password</label>
-        <input id="signupPassword" type="password" placeholder="At least 6 characters" autocomplete="new-password">
-      </div>
-      <p id="signupError" class="auth-error"></p>
-      <button id="signupBtn" class="auth-btn">Create Account</button>
-      <p class="auth-switch">Already have one? <a id="showLoginBtn" href="#">Sign in</a></p>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">CHANNELS</div>
+      <button class="serverBtn selected" data-server="server1"><span class="channel-hash">#</span><span class="channel-label">general</span><span class="unread-dot" id="unread-server1" style="display:none;"></span></button>
+      <button class="serverBtn" data-server="server2"><span class="channel-hash">#</span><span class="channel-label">general-2</span><span class="unread-dot" id="unread-server2" style="display:none;"></span></button>
+      <div id="privateChannelBtn"></div>
+      <div id="modChatBtn"></div>
     </div>
-
-    <!-- GOOGLE USERNAME PICKER -->
-    <div class="auth-card" id="googleUsernameCard" style="display:none;">
-      <div class="auth-logo">
-        <img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
-        <span>Camzzz's Discord</span>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">ONLINE</div>
+      <div class="online-count-display">
+        <span class="online-dot"></span>
+        <span id="onlineCountNum">0</span>&nbsp;online
       </div>
-      <h2>Pick a username</h2>
-      <p class="auth-subtitle">How you'll appear in chat. You can change it once per week.</p>
-      <div class="auth-field">
-        <label>Username</label>
-        <input id="googleUsername" type="text" placeholder="CoolUsername" maxlength="24">
-        <span id="googleUsernameCheck" class="field-hint"></span>
-      </div>
-      <p id="googleUsernameError" class="auth-error"></p>
-      <button id="googleUsernameConfirmBtn" class="auth-btn">Let's go →</button>
     </div>
-
-    <!-- VERIFY EMAIL CARD -->
-    <div class="auth-card" id="verifyCard" style="display:none;">
-      <div class="auth-logo">
-        <img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
-        <span>Camzzz's Discord</span>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">APPEARANCE</div>
+      <div id="colorPickerBtn"></div>
+      <div id="themeColorSection"></div>
+      <div id="textSizeSection"></div>
+    </div>
+    <div class="sidebar-user-panel">
+      <div class="user-avatar-wrap" id="sidebarAvatarWrap" title="Click to change profile picture">
+        <div class="user-avatar" id="sidebarAvatar"></div>
       </div>
-      <h2>Check your email</h2>
-      <p class="auth-subtitle">We sent a verification link to <strong id="verifyEmailAddr"></strong>. Click it to activate your account.</p>
-      <button id="resendVerifyBtn2" class="auth-btn" style="margin-top:8px;">Resend Email</button>
-      <p class="auth-switch"><a id="backToLoginBtn" href="#">← Back to sign in</a></p>
+      <div class="user-info">
+        <div id="sidebarUsername" class="user-name">Loading...</div>
+        <div id="sidebarUserTags" class="sidebar-user-tags"></div>
+        <div class="user-status">● Online</div>
+      </div>
+      <button id="logoutBtn" class="logout-btn" title="Sign out">⏻</button>
     </div>
   </div>
 
-  <!-- ========== MOD MENU PASSWORD GATE ========== -->
-  <div id="modMenuPasswordGate" style="display:none;">
-    <div class="gateCard">
-      <div class="gateLogo">🛡️ Mod Access</div>
-      <h2>Moderator Login</h2>
-      <p class="gateSubtitle">Enter the mod password to access admin controls.</p>
-      <div class="inputRow">
-        <input id="modMenuPasswordInput" type="password" placeholder="Mod password" autocomplete="off">
-        <button id="modMenuEnterBtn">Enter</button>
+  <div id="chatContainer">
+    <div id="chatHeader">
+      <span class="channel-hash" style="font-size:18px;">#</span>
+      <span id="channelName">general</span>
+      <div id="betaWarning">⚠ Beta — messages may lag. Click to dismiss.</div>
+    </div>
+    <div id="chatbox"></div>
+    <div id="typingIndicator" class="typing-indicator" style="display:none;">
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+      <span id="typingText"></span>
+    </div>
+    <div id="scrollToBottomBtn" class="scroll-to-bottom" style="display:none;">↓ New messages</div>
+    <div id="replyBar" style="display:none;">
+      <div class="reply-bar-inner">
+        <span class="reply-bar-label">↩ Replying to <strong id="replyToName"></strong></span>
+        <span class="reply-bar-preview" id="replyToPreview"></span>
+        <button id="cancelReplyBtn">✕</button>
       </div>
-      <p id="modMenuGateMessage" class="gateMessage"></p>
+    </div>
+    <div id="usernameChangeBar" style="display:none;">
+      <div class="username-change-inner">
+        <input id="usernameChangeInput" placeholder="New username" maxlength="24">
+        <span id="usernameChangeCooldown" class="cooldown-hint"></span>
+        <button id="usernameChangeSaveBtn">Save</button>
+        <button id="usernameChangeCancelBtn">Cancel</button>
+      </div>
+    </div>
+    <div id="mentionDropdown" class="mention-dropdown" style="display:none;"></div>
+    <div id="inputArea">
+      <button id="changeUsernameBtn" class="input-icon-btn" title="Change username">✏️</button>
+      <input id="msgInput" placeholder="Message #general">
+      <button id="sendBtn">Send</button>
     </div>
   </div>
+</div>
 
-  <!-- ========== MOD MENU ========== -->
-  <div id="modMenu" style="display:none;">
-    <div class="modMenuContainer">
-
-      <!-- Header -->
-      <div class="modMenuHeader">
-        <div class="modMenuHeaderLeft">
-          <span class="modMenuIcon">⚙️</span>
-          <div>
-            <h2>Moderator Panel</h2>
-            <p class="modMenuSubtitle">Server administration controls</p>
-          </div>
-        </div>
-        <button id="modMenuCloseBtn">✕ Close</button>
-      </div>
-
-      <!-- Search Bar -->
-      <div class="modSearchBar">
-        <span class="modSearchIcon">🔍</span>
-        <input id="modSearchInput" type="text" placeholder="Search users by name or ID..." autocomplete="off">
-      </div>
-
-      <!-- Tab Bar -->
-      <div class="modTabBar">
-        <button class="modTab active" data-tab="users">
-          <span>👥</span> Users
-          <span class="modTabBadge" id="usersTabBadge">0</span>
-        </button>
-        <button class="modTab" data-tab="bans">
-          <span>🚫</span> Bans
-          <span class="modTabBadge" id="bansTabBadge">0</span>
-        </button>
-        <button class="modTab" data-tab="tags">
-          <span>🏷️</span> Tags
-          <span class="modTabBadge" id="tagsTabBadge">0</span>
-        </button>
-        <button class="modTab" data-tab="timeouts">
-          <span>⏱️</span> Timeouts
-          <span class="modTabBadge" id="timeoutsTabBadge">0</span>
-        </button>
-      </div>
-
-      <!-- TAB: USERS -->
-      <div class="modTabContent active" id="tabUsers">
-        <div id="allUsersList"></div>
-      </div>
-
-      <!-- TAB: BANS -->
-      <div class="modTabContent" id="tabBans">
-        <div class="modSectionInner">
-          <label class="modLabel">Ban a User by ID</label>
-          <div class="inputRow">
-            <input id="banUserInput" placeholder="Enter User ID">
-            <button id="banUserBtn" class="mod-action-btn danger">🚫 Ban</button>
-          </div>
-        </div>
-        <div class="modSectionInner">
-          <label class="modLabel">Currently Banned</label>
-          <div id="bannedUsersList"></div>
-        </div>
-      </div>
-
-      <!-- TAB: TAGS -->
-      <div class="modTabContent" id="tabTags">
-        <div class="modSectionInner">
-          <label class="modLabel">Available Tags — click to select</label>
-          <div id="tagPalette" class="tagPalette"></div>
-        </div>
-        <div class="modSectionInner">
-          <label class="modLabel">Apply Tag to User</label>
-          <div class="inputRow">
-            <input id="tagUserIdInput" placeholder="User ID">
-            <input id="tagNameInput" placeholder="Tag name (or click above)" readonly>
-            <button id="addTagBtn" class="mod-action-btn">➕ Add</button>
-          </div>
-          <p class="modHint">Click a tag above to auto-fill, then enter the User ID and hit Add.</p>
-        </div>
-        <div class="modSectionInner">
-          <label class="modLabel">Tagged Users</label>
-          <div id="userTagsList"></div>
-        </div>
-      </div>
-
-      <!-- TAB: TIMEOUTS -->
-      <div class="modTabContent" id="tabTimeouts">
-        <div class="modSectionInner">
-          <label class="modLabel">Timeout a User</label>
-          <div class="inputRow" style="margin-bottom:12px;">
-            <input id="timeoutUserIdInput" placeholder="Enter User ID">
-          </div>
-          <label class="modLabel">Duration</label>
-          <div class="timeoutDurationGrid">
-            <button class="timeoutDurBtn" data-ms="300000">5 min</button>
-            <button class="timeoutDurBtn" data-ms="1800000">30 min</button>
-            <button class="timeoutDurBtn" data-ms="3600000">1 hour</button>
-            <button class="timeoutDurBtn" data-ms="21600000">6 hours</button>
-            <button class="timeoutDurBtn" data-ms="86400000">24 hours</button>
-            <button class="timeoutDurBtn" data-ms="604800000">1 week</button>
-          </div>
-          <button id="applyTimeoutBtn" class="mod-action-btn" style="margin-top:12px;width:100%;">⏱️ Apply Timeout</button>
-        </div>
-        <div class="modSectionInner">
-          <label class="modLabel">Active Timeouts</label>
-          <div id="activeTimeoutsList"></div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ========== CONFIRM DIALOG ========== -->
-  <div id="modConfirmDialog" style="display:none;">
-    <div class="confirmCard">
-      <div class="confirmIcon" id="confirmIcon">⚠️</div>
-      <h3 id="confirmTitle">Are you sure?</h3>
-      <p id="confirmMessage">This action cannot be undone.</p>
-      <div class="confirmBtns">
-        <button id="confirmCancelBtn" class="confirmBtn cancel">Cancel</button>
-        <button id="confirmOkBtn" class="confirmBtn ok">Confirm</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== AVATAR UPLOAD INPUT (hidden) ========== -->
-  <input type="file" id="avatarFileInput" accept="image/*" style="display:none;">
-
-  <!-- ========== LOADING SCREEN ========== -->
-  <div id="loadingScreen" style="display:none;">
-    <div class="loading-content">
-      <img class="loading-logo-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
-      <h2>Loading Chat...</h2>
-      <div id="countdownContainer"><div id="countdownBar"></div></div>
-      <p id="countdownText">3s</p>
-    </div>
-  </div>
-
-  <!-- ========== MAIN APP ========== -->
-  <div id="appContainer" style="display:none;">
-
-    <!-- SIDEBAR -->
-    <div id="sidebar">
-      <div class="sidebar-top">
-        <div class="sidebar-brand">
-          <img class="sidebar-logo-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
-          <span>Camzzz's Discord</span>
-        </div>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-label">CHANNELS</div>
-        <button class="serverBtn" data-server="server1"><span class="channel-hash">#</span> general</button>
-        <button class="serverBtn" data-server="server2"><span class="channel-hash">#</span> general-2</button>
-      </div>
-      <div class="sidebar-section">
-        <!-- Online count -->
-        <div class="sidebar-section-label">ONLINE</div>
-        <div id="onlineCountDisplay" class="online-count-display">
-          <span class="online-dot"></span>
-          <span id="onlineCountNum">0</span> online
-        </div>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-label">APPEARANCE</div>
-        <div id="colorPickerBtn"></div>
-        <div id="themeColorSection"></div>
-        <div id="textSizeSection"></div>
-      </div>
-      <div class="sidebar-user-panel">
-        <!-- Clickable avatar -->
-        <div class="user-avatar-wrap" id="sidebarAvatarWrap" title="Click to change profile picture">
-          <div class="user-avatar" id="sidebarAvatar">?</div>
-          <div class="avatar-upload-overlay">📷</div>
-        </div>
-        <div class="user-info">
-          <div id="sidebarUsername" class="user-name">Loading...</div>
-          <div class="user-status">● Online</div>
-        </div>
-        <button id="logoutBtn" class="logout-btn" title="Sign out">⏻</button>
-      </div>
-    </div>
-
-    <!-- CHAT -->
-    <div id="chatContainer">
-      <div id="chatHeader">
-        <span class="channel-hash" style="font-size:18px;">#</span>
-        <span id="channelName">general</span>
-        <div id="betaWarning">⚠ Beta — messages may lag. Click to dismiss.</div>
-      </div>
-      <div id="chatbox"></div>
-
-      <!-- Typing indicator -->
-      <div id="typingIndicator" class="typing-indicator" style="display:none;">
-        <div class="typing-dots"><span></span><span></span><span></span></div>
-        <span id="typingText"></span>
-      </div>
-
-      <!-- Reply bar -->
-      <div id="replyBar" style="display:none;">
-        <div class="reply-bar-inner">
-          <span class="reply-bar-label">↩ Replying to <strong id="replyToName"></strong></span>
-          <span class="reply-bar-preview" id="replyToPreview"></span>
-          <button id="cancelReplyBtn">✕</button>
-        </div>
-      </div>
-
-      <div id="usernameChangeBar" style="display:none;">
-        <div class="username-change-inner">
-          <input id="usernameChangeInput" placeholder="New username" maxlength="24">
-          <span id="usernameChangeCooldown" class="cooldown-hint"></span>
-          <button id="usernameChangeSaveBtn">Save</button>
-          <button id="usernameChangeCancelBtn">Cancel</button>
-        </div>
-      </div>
-
-      <!-- @mention autocomplete -->
-      <div id="mentionDropdown" class="mention-dropdown" style="display:none;"></div>
-
-      <div id="inputArea">
-        <button id="changeUsernameBtn" class="input-icon-btn" title="Change username">✏️</button>
-        <input id="msgInput" placeholder="Message #general">
-        <button id="sendBtn">Send</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
