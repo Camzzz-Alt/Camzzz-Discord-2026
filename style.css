@@ -259,13 +259,19 @@ input, button, textarea, select { font-family: 'Montserrat', sans-serif; }
 }
 #adminSearchInput::placeholder, #modSearchInput::placeholder { color: var(--text-dim); }
 
-/* Tab bar */
+/* Tab bar — scrollable so all tabs are reachable */
 .modTabBar {
   display: flex; gap: 2px; padding: 10px 16px 0;
   border-bottom: 1px solid var(--border); background: var(--bg-dark);
-  flex-shrink: 0; overflow-x: auto; scrollbar-width: none;
+  flex-shrink: 0; overflow-x: auto; scrollbar-width: thin;
+  scrollbar-color: var(--bg-input) transparent;
+  /* Fade out right edge to hint at more tabs */
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
 }
-.modTabBar::-webkit-scrollbar { display: none; }
+.modTabBar::-webkit-scrollbar { height: 3px; }
+.modTabBar::-webkit-scrollbar-track { background: transparent; }
+.modTabBar::-webkit-scrollbar-thumb { background: var(--bg-input); border-radius: 2px; }
 
 .modTab {
   display: flex; align-items: center; gap: 6px; padding: 9px 12px;
