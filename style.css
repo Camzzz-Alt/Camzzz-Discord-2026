@@ -654,6 +654,12 @@ input, button, textarea, select { font-family: 'Montserrat', sans-serif; }
 .user-avatar-wrap.uploading .user-avatar { animation: loadingPulse 0.8s ease-in-out infinite; }
 
 .sidebar-user-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.sidebar-tags-wrap {
+  display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 8px 6px;
+}
+
+.sidebar-tags-wrap { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 8px 6px; }
+
 .sidebar-tag-pill {
   font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 20px;
   border: 1px solid transparent; letter-spacing: 0.04em; transition: transform var(--transition);
