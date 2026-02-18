@@ -18,7 +18,8 @@ const db   = firebase.database();
 // ============================================================
 // CONSTANTS
 // ============================================================
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const WEEK_MS   = 7 * 24 * 60 * 60 * 1000;
+const IMGBB_KEY = "7ae7b64cb4da961ab6a7d18d920099a8";
 
 // ============================================================
 // DOM REFS — AUTH
@@ -28,7 +29,6 @@ const loginCard            = document.getElementById("loginCard");
 const signupCard           = document.getElementById("signupCard");
 const verifyCard           = document.getElementById("verifyCard");
 const googleUsernameCard   = document.getElementById("googleUsernameCard");
-
 const loginEmail           = document.getElementById("loginEmail");
 const loginPassword        = document.getElementById("loginPassword");
 const loginBtn             = document.getElementById("loginBtn");
@@ -37,7 +37,6 @@ const googleSignInBtn      = document.getElementById("googleSignInBtn");
 const showSignupBtn        = document.getElementById("showSignupBtn");
 const verifyNotice         = document.getElementById("verifyNotice");
 const resendVerifyBtn      = document.getElementById("resendVerifyBtn");
-
 const signupUsername       = document.getElementById("signupUsername");
 const signupEmail          = document.getElementById("signupEmail");
 const signupPassword       = document.getElementById("signupPassword");
@@ -46,12 +45,10 @@ const signupError          = document.getElementById("signupError");
 const googleSignUpBtn      = document.getElementById("googleSignUpBtn");
 const showLoginBtn         = document.getElementById("showLoginBtn");
 const usernameCheck        = document.getElementById("usernameCheck");
-
 const googleUsername       = document.getElementById("googleUsername");
 const googleUsernameCheck  = document.getElementById("googleUsernameCheck");
 const googleUsernameError  = document.getElementById("googleUsernameError");
 const googleUsernameConfirmBtn = document.getElementById("googleUsernameConfirmBtn");
-
 const verifyEmailAddr      = document.getElementById("verifyEmailAddr");
 const resendVerifyBtn2     = document.getElementById("resendVerifyBtn2");
 const backToLoginBtn       = document.getElementById("backToLoginBtn");
@@ -59,21 +56,30 @@ const backToLoginBtn       = document.getElementById("backToLoginBtn");
 // ============================================================
 // DOM REFS — APP
 // ============================================================
-const appContainer         = document.getElementById("appContainer");
-const loadingScreen        = document.getElementById("loadingScreen");
-const chatbox              = document.getElementById("chatbox");
-const msgInput             = document.getElementById("msgInput");
-const sendBtn              = document.getElementById("sendBtn");
-const channelName          = document.getElementById("channelName");
-const sidebarUsername      = document.getElementById("sidebarUsername");
-const sidebarAvatar        = document.getElementById("sidebarAvatar");
-const logoutBtn            = document.getElementById("logoutBtn");
-const changeUsernameBtn    = document.getElementById("changeUsernameBtn");
-const usernameChangeBar    = document.getElementById("usernameChangeBar");
-const usernameChangeInput  = document.getElementById("usernameChangeInput");
+const appContainer             = document.getElementById("appContainer");
+const loadingScreen            = document.getElementById("loadingScreen");
+const chatbox                  = document.getElementById("chatbox");
+const msgInput                 = document.getElementById("msgInput");
+const sendBtn                  = document.getElementById("sendBtn");
+const channelName              = document.getElementById("channelName");
+const sidebarUsername          = document.getElementById("sidebarUsername");
+const sidebarAvatar            = document.getElementById("sidebarAvatar");
+const sidebarAvatarWrap        = document.getElementById("sidebarAvatarWrap");
+const logoutBtn                = document.getElementById("logoutBtn");
+const changeUsernameBtn        = document.getElementById("changeUsernameBtn");
+const usernameChangeBar        = document.getElementById("usernameChangeBar");
+const usernameChangeInput      = document.getElementById("usernameChangeInput");
 const usernameChangeSaveBtn    = document.getElementById("usernameChangeSaveBtn");
 const usernameChangeCancelBtn  = document.getElementById("usernameChangeCancelBtn");
 const usernameChangeCooldown   = document.getElementById("usernameChangeCooldown");
+const avatarFileInput          = document.getElementById("avatarFileInput");
+const typingIndicator          = document.getElementById("typingIndicator");
+const typingText               = document.getElementById("typingText");
+const replyBar                 = document.getElementById("replyBar");
+const replyToName              = document.getElementById("replyToName");
+const replyToPreview           = document.getElementById("replyToPreview");
+const cancelReplyBtn           = document.getElementById("cancelReplyBtn");
+const mentionDropdown          = document.getElementById("mentionDropdown");
 
 // ============================================================
 // DOM REFS — MOD MENU
@@ -97,22 +103,27 @@ let currentUser     = null;
 let currentUserId   = null;
 let currentUsername = "Guest";
 let myColor         = "#5865f2";
+let myAvatar        = null;
 let currentServer   = "server1";
 let dbRef           = null;
 let dbListener      = null;
 let displayedMessages = new Set();
 
+// Reply state
+let replyingTo = null; // { messageId, name, text }
+
+// Typing state
+let typingTimer = null;
+let isTyping    = false;
+
+// Timeout duration selection
+let selectedTimeoutMs = null;
+
 // ============================================================
 // HELPERS
 // ============================================================
-function showError(el, msg) {
-  el.textContent = msg;
-  el.classList.add("show");
-}
-function clearError(el) {
-  el.textContent = "";
-  el.classList.remove("show");
-}
+function showError(el, msg) { el.textContent = msg; el.classList.add("show"); }
+function clearError(el)     { el.textContent = ""; el.classList.remove("show"); }
 function showModGateMsg(msg, ok = false) {
   modMenuGateMessage.textContent = msg;
   modMenuGateMessage.style.color = ok ? "#57f287" : "#f87171";
@@ -127,24 +138,283 @@ function encodeEmoji(emoji) {
 }
 function friendlyAuthError(code) {
   const map = {
-    "auth/user-not-found":      "No account with that email.",
-    "auth/wrong-password":      "Incorrect password.",
-    "auth/invalid-email":       "Invalid email address.",
-    "auth/too-many-requests":   "Too many attempts — try again later.",
-    "auth/email-already-in-use":"An account with that email already exists.",
-    "auth/invalid-credential":  "Incorrect email or password.",
+    "auth/user-not-found":       "No account with that email.",
+    "auth/wrong-password":       "Incorrect password.",
+    "auth/invalid-email":        "Invalid email address.",
+    "auth/too-many-requests":    "Too many attempts — try again later.",
+    "auth/email-already-in-use": "An account with that email already exists.",
+    "auth/invalid-credential":   "Incorrect email or password.",
   };
   return map[code] || "Something went wrong. Try again.";
 }
+function stripHtml(html) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || "";
+}
+
+// ============================================================
+// AVATAR HELPERS
+// ============================================================
+function buildAvatarEl(avatarUrl, username, color, size = 36) {
+  if (avatarUrl) {
+    const img = document.createElement("img");
+    img.src = avatarUrl;
+    img.className = "avatar-img";
+    img.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.3);`;
+    img.onerror = () => img.replaceWith(makeInitialAvatar(username, color, size));
+    return img;
+  }
+  return makeInitialAvatar(username, color, size);
+}
+
+function makeInitialAvatar(username, color, size = 36) {
+  const div = document.createElement("div");
+  div.className = "avatar-initial";
+  div.textContent = (username || "?").charAt(0).toUpperCase();
+  div.style.cssText = `width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,${color}cc,${color}66);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${Math.floor(size*0.4)}px;flex-shrink:0;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);`;
+  return div;
+}
+
+// Update the sidebar avatar display
+function updateSidebarAvatar() {
+  sidebarAvatar.innerHTML = "";
+  if (myAvatar) {
+    const img = document.createElement("img");
+    img.src = myAvatar;
+    img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:50%;";
+    img.onerror = () => { sidebarAvatar.innerHTML = ""; sidebarAvatar.textContent = currentUsername.charAt(0).toUpperCase(); };
+    sidebarAvatar.appendChild(img);
+    sidebarAvatar.textContent = "";
+  } else {
+    sidebarAvatar.textContent = currentUsername.charAt(0).toUpperCase();
+  }
+}
+
+// ============================================================
+// IMGBB UPLOAD
+// ============================================================
+async function uploadToImgBB(file) {
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  if (file.size > maxSize) {
+    alert("Image must be under 5MB.");
+    return null;
+  }
+
+  const formData = new FormData();
+  formData.append("image", file);
+
+  try {
+    sidebarAvatarWrap.classList.add("uploading");
+    const res  = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
+      method: "POST",
+      body:   formData
+    });
+    const json = await res.json();
+    sidebarAvatarWrap.classList.remove("uploading");
+
+    if (json.success) {
+      return json.data.url;
+    } else {
+      alert("Image upload failed. Please try again.");
+      return null;
+    }
+  } catch(err) {
+    sidebarAvatarWrap.classList.remove("uploading");
+    alert("Upload error: " + err.message);
+    return null;
+  }
+}
+
+// Avatar click → file picker
+sidebarAvatarWrap.addEventListener("click", () => avatarFileInput.click());
+
+avatarFileInput.addEventListener("change", async () => {
+  const file = avatarFileInput.files[0];
+  if (!file) return;
+  avatarFileInput.value = "";
+
+  const url = await uploadToImgBB(file);
+  if (!url) return;
+
+  myAvatar = url;
+  await db.ref(`adminData/allUsers/${currentUserId}`).update({ avatarUrl: url });
+  updateSidebarAvatar();
+});
+
+// ============================================================
+// ONLINE PRESENCE
+// ============================================================
+function setupPresence() {
+  const presenceRef    = db.ref(`presence/${currentUserId}`);
+  const connectedRef   = db.ref(".info/connected");
+
+  connectedRef.on("value", snap => {
+    if (!snap.val()) return;
+    presenceRef.onDisconnect().remove();
+    presenceRef.set({
+      username: currentUsername,
+      color:    myColor,
+      online:   true
+    });
+  });
+
+  // Watch total online count
+  db.ref("presence").on("value", snap => {
+    const count = snap.numChildren();
+    document.getElementById("onlineCountNum").textContent = count;
+  });
+}
+
+function cleanupPresence() {
+  if (currentUserId) db.ref(`presence/${currentUserId}`).remove();
+}
+
+// ============================================================
+// TYPING INDICATOR
+// ============================================================
+function setTyping(active) {
+  if (!currentUserId) return;
+  const ref = db.ref(`typing/${currentServer}/${currentUserId}`);
+  if (active) {
+    ref.set({ username: currentUsername, ts: Date.now() });
+  } else {
+    ref.remove();
+  }
+}
+
+function setupTypingListener() {
+  db.ref(`typing/${currentServer}`).on("value", snap => {
+    const typers = snap.val() || {};
+    const names  = Object.entries(typers)
+      .filter(([uid]) => uid !== currentUserId)
+      .map(([, v]) => v.username);
+
+    if (names.length === 0) {
+      typingIndicator.style.display = "none";
+    } else {
+      typingIndicator.style.display = "flex";
+      if (names.length === 1) {
+        typingText.textContent = `${names[0]} is typing...`;
+      } else if (names.length === 2) {
+        typingText.textContent = `${names[0]} and ${names[1]} are typing...`;
+      } else {
+        typingText.textContent = `${names.length} people are typing...`;
+      }
+    }
+  });
+}
+
+msgInput.addEventListener("input", () => {
+  if (!isTyping) {
+    isTyping = true;
+    setTyping(true);
+  }
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    isTyping = false;
+    setTyping(false);
+  }, 3000);
+});
+
+// ============================================================
+// REPLY SYSTEM
+// ============================================================
+function setReply(messageId, name, text) {
+  replyingTo = { messageId, name, text };
+  replyToName.textContent    = name;
+  replyToPreview.textContent = stripHtml(text).substring(0, 80);
+  replyBar.style.display     = "block";
+  msgInput.focus();
+}
+
+function clearReply() {
+  replyingTo = null;
+  replyBar.style.display = "none";
+}
+
+cancelReplyBtn.addEventListener("click", clearReply);
+
+// ============================================================
+// @MENTION AUTOCOMPLETE
+// ============================================================
+let allUsersCache = {};
+let mentionActive = false;
+let mentionQuery  = "";
+
+msgInput.addEventListener("keyup", e => {
+  const val    = msgInput.value;
+  const cursor = msgInput.selectionStart;
+
+  // Find if there's an @ before the cursor with no space after it
+  const before = val.substring(0, cursor);
+  const match  = before.match(/@(\w*)$/);
+
+  if (match) {
+    mentionQuery  = match[1].toLowerCase();
+    mentionActive = true;
+    showMentionDropdown(mentionQuery);
+  } else {
+    mentionActive = false;
+    mentionDropdown.style.display = "none";
+  }
+});
+
+function showMentionDropdown(query) {
+  const users = Object.values(allUsersCache).filter(u =>
+    u.username && u.username.toLowerCase().startsWith(query)
+  ).slice(0, 6);
+
+  if (users.length === 0) {
+    mentionDropdown.style.display = "none";
+    return;
+  }
+
+  mentionDropdown.innerHTML = "";
+  users.forEach(u => {
+    const item = document.createElement("div");
+    item.className = "mention-item";
+    const av = buildAvatarEl(u.avatarUrl || null, u.username, u.usernameColor || "#5865f2", 24);
+    const name = document.createElement("span");
+    name.textContent = u.username;
+    name.style.color = u.usernameColor || "#fff";
+    name.style.fontWeight = "700";
+    item.appendChild(av);
+    item.appendChild(name);
+    item.addEventListener("click", () => insertMention(u.username));
+    mentionDropdown.appendChild(item);
+  });
+
+  mentionDropdown.style.display = "block";
+}
+
+function insertMention(username) {
+  const val    = msgInput.value;
+  const cursor = msgInput.selectionStart;
+  const before = val.substring(0, cursor);
+  const after  = val.substring(cursor);
+  const newBefore = before.replace(/@\w*$/, `@${username} `);
+  msgInput.value = newBefore + after;
+  msgInput.focus();
+  mentionDropdown.style.display = "none";
+  mentionActive = false;
+}
+
+// Close mention dropdown on outside click
+document.addEventListener("click", e => {
+  if (!mentionDropdown.contains(e.target) && e.target !== msgInput) {
+    mentionDropdown.style.display = "none";
+  }
+});
 
 // ============================================================
 // AUTH SCREEN NAVIGATION
 // ============================================================
 function showCard(which) {
-  loginCard.style.display          = which === "login"           ? "" : "none";
-  signupCard.style.display         = which === "signup"          ? "" : "none";
-  verifyCard.style.display         = which === "verify"          ? "" : "none";
-  googleUsernameCard.style.display = which === "googleUsername"  ? "" : "none";
+  loginCard.style.display          = which === "login"          ? "" : "none";
+  signupCard.style.display         = which === "signup"         ? "" : "none";
+  verifyCard.style.display         = which === "verify"         ? "" : "none";
+  googleUsernameCard.style.display = which === "googleUsername" ? "" : "none";
   clearError(loginError);
   clearError(signupError);
   clearError(googleUsernameError);
@@ -155,13 +425,13 @@ showLoginBtn.addEventListener("click",   e => { e.preventDefault(); showCard("lo
 backToLoginBtn.addEventListener("click", e => { e.preventDefault(); showCard("login"); });
 
 // ============================================================
-// USERNAME AVAILABILITY CHECK
+// USERNAME AVAILABILITY
 // ============================================================
 function checkUsernameAvailable(name, excludeUid, callback) {
   db.ref("adminData/allUsers").once("value", snap => {
     const users = snap.val() || {};
     const lower = name.toLowerCase();
-    let taken = false;
+    let taken   = false;
     for (let id in users) {
       if (id === excludeUid) continue;
       if ((users[id].username || "").toLowerCase() === lower) { taken = true; break; }
@@ -170,18 +440,6 @@ function checkUsernameAvailable(name, excludeUid, callback) {
   });
 }
 
-async function findAvailableUsername(base) {
-  const snap  = await db.ref("adminData/allUsers").once("value");
-  const users = snap.val() || {};
-  const taken = new Set(Object.values(users).map(u => (u.username || "").toLowerCase()));
-  let candidate = base.replace(/\s+/g, "").substring(0, 20) || "User";
-  if (!taken.has(candidate.toLowerCase())) return candidate;
-  let i = 2;
-  while (taken.has((candidate + i).toLowerCase())) i++;
-  return candidate + i;
-}
-
-// Live username check on signup form
 let usernameCheckTimer = null;
 function setupLiveUsernameCheck(inputEl, hintEl, excludeUid = null) {
   inputEl.addEventListener("input", () => {
@@ -189,7 +447,7 @@ function setupLiveUsernameCheck(inputEl, hintEl, excludeUid = null) {
     const val = inputEl.value.trim();
     if (!val) { hintEl.textContent = ""; hintEl.className = "field-hint"; return; }
     hintEl.textContent = "Checking...";
-    hintEl.className = "field-hint";
+    hintEl.className   = "field-hint";
     usernameCheckTimer = setTimeout(() => {
       checkUsernameAvailable(val, excludeUid, ok => {
         hintEl.textContent = ok ? "✓ Available" : "✗ Already taken";
@@ -212,7 +470,6 @@ async function handleGoogleAuth() {
     const result = await auth.signInWithPopup(provider);
     const user   = result.user;
     const snap   = await db.ref(`adminData/allUsers/${user.uid}`).once("value");
-
     if (!snap.exists()) {
       pendingGoogleUser = user;
       googleUsername.value = "";
@@ -220,9 +477,7 @@ async function handleGoogleAuth() {
       showCard("googleUsername");
       googleUsername.focus();
     }
-  } catch(err) {
-    showError(loginError, err.message);
-  }
+  } catch(err) { showError(loginError, err.message); }
 }
 
 googleSignInBtn.addEventListener("click", handleGoogleAuth);
@@ -238,16 +493,11 @@ googleUsernameConfirmBtn.addEventListener("click", async () => {
     if (!pendingGoogleUser) return showError(googleUsernameError, "Something went wrong. Please try again.");
 
     await db.ref(`adminData/allUsers/${pendingGoogleUser.uid}`).set({
-      username: name,
-      usernameColor: "#5865f2",
-      lastUsernameChange: 0,
-      email: pendingGoogleUser.email || ""
+      username: name, usernameColor: "#5865f2", lastUsernameChange: 0, email: pendingGoogleUser.email || ""
     });
-
     currentUser   = pendingGoogleUser;
     currentUserId = pendingGoogleUser.uid;
     pendingGoogleUser = null;
-
     authScreen.style.display = "none";
     startApp();
   });
@@ -261,7 +511,6 @@ signupBtn.addEventListener("click", async () => {
   const name  = signupUsername.value.trim();
   const email = signupEmail.value.trim();
   const pass  = signupPassword.value;
-
   if (!name  || name.length < 2) return showError(signupError, "Username must be at least 2 characters.");
   if (!email)                     return showError(signupError, "Please enter your email.");
   if (!pass  || pass.length < 6)  return showError(signupError, "Password must be at least 6 characters.");
@@ -272,16 +521,11 @@ signupBtn.addEventListener("click", async () => {
       const result = await auth.createUserWithEmailAndPassword(email, pass);
       await result.user.sendEmailVerification();
       await db.ref(`adminData/allUsers/${result.user.uid}`).set({
-        username: name,
-        usernameColor: "#5865f2",
-        lastUsernameChange: 0,
-        email: email
+        username: name, usernameColor: "#5865f2", lastUsernameChange: 0, email
       });
       verifyEmailAddr.textContent = email;
       showCard("verify");
-    } catch(err) {
-      showError(signupError, friendlyAuthError(err.code));
-    }
+    } catch(err) { showError(signupError, friendlyAuthError(err.code)); }
   });
 });
 
@@ -301,9 +545,7 @@ loginBtn.addEventListener("click", async () => {
       verifyNotice.style.display = "block";
       showError(loginError, "Please verify your email before signing in.");
     }
-  } catch(err) {
-    showError(loginError, friendlyAuthError(err.code));
-  }
+  } catch(err) { showError(loginError, friendlyAuthError(err.code)); }
 });
 
 loginEmail.addEventListener("keydown",    e => { if (e.key === "Enter") loginBtn.click(); });
@@ -329,28 +571,21 @@ resendVerifyBtn2.addEventListener("click", async () => {
 });
 
 // ============================================================
-// AUTH STATE OBSERVER
+// AUTH STATE
 // ============================================================
 auth.onAuthStateChanged(async user => {
   if (!user) {
-    authScreen.style.display = "flex";
+    authScreen.style.display   = "flex";
     appContainer.style.display = "none";
     loadingScreen.style.display = "none";
     showCard("login");
     return;
   }
-
   const isGoogle = user.providerData[0]?.providerId === "google.com";
-
-  if (!isGoogle && !user.emailVerified) {
-    await auth.signOut();
-    return;
-  }
+  if (!isGoogle && !user.emailVerified) { await auth.signOut(); return; }
 
   const snap = await db.ref(`adminData/allUsers/${user.uid}`).once("value");
-  if (!snap.exists()) {
-    return;
-  }
+  if (!snap.exists()) return;
 
   currentUser   = user;
   currentUserId = user.uid;
@@ -362,6 +597,8 @@ auth.onAuthStateChanged(async user => {
 // LOGOUT
 // ============================================================
 logoutBtn.addEventListener("click", () => {
+  cleanupPresence();
+  setTyping(false);
   if (dbRef && dbListener) dbRef.off("child_added", dbListener);
   auth.signOut();
 });
@@ -377,6 +614,7 @@ function startApp() {
     const data      = snap.val() || {};
     currentUsername = data.username || currentUser.displayName || "Guest";
     myColor         = data.usernameColor || "#5865f2";
+    myAvatar        = data.avatarUrl || null;
     buildSidebar();
     updateUserPanel();
     runLoadingCountdown();
@@ -398,6 +636,7 @@ function runLoadingCountdown() {
       appContainer.style.display  = "flex";
       switchServer("server1");
       setupModMenuTrigger();
+      setupPresence();
     }
   }, 100);
 }
@@ -426,7 +665,6 @@ function buildColorPicker() {
   btn.className = "sidebar-ctrl-btn";
   btn.appendChild(dot);
   btn.appendChild(Object.assign(document.createElement("span"), { textContent: "Username Color" }));
-
   btn.addEventListener("click", () => picker.click());
   btn.addEventListener("mouseenter", () => dot.style.transform = "scale(1.3)");
   btn.addEventListener("mouseleave", () => dot.style.transform = "scale(1)");
@@ -472,18 +710,16 @@ function buildTextSizePicker() {
   section.innerHTML = '<div class="sidebar-section-label sub">TEXT SIZE</div>';
   const row = document.createElement("div");
   row.className = "text-size-row";
-  
   const savedSize = localStorage.getItem("textSize") || "14px";
-  
-  const chatboxElement = document.getElementById("chatbox");
-  if (chatboxElement) chatboxElement.style.fontSize = savedSize;
+  const chatboxEl = document.getElementById("chatbox");
+  if (chatboxEl) chatboxEl.style.fontSize = savedSize;
 
   ["12px","14px","16px","18px"].forEach(size => {
     const btn = document.createElement("button");
     btn.className = "size-btn" + (savedSize === size ? " active" : "");
     btn.textContent = size;
     btn.addEventListener("click", () => {
-      if (chatboxElement) chatboxElement.style.fontSize = size;
+      if (chatboxEl) chatboxEl.style.fontSize = size;
       localStorage.setItem("textSize", size);
       row.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
@@ -496,11 +732,27 @@ function buildTextSizePicker() {
 function updateUserPanel() {
   sidebarUsername.textContent = currentUsername;
   sidebarUsername.style.color = myColor;
-  sidebarAvatar.textContent   = currentUsername.charAt(0).toUpperCase();
+  updateSidebarAvatar();
+}
+
+function updateSidebarAvatar() {
+  sidebarAvatar.innerHTML = "";
+  if (myAvatar) {
+    const img = document.createElement("img");
+    img.src = myAvatar;
+    img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:50%;";
+    img.onerror = () => {
+      sidebarAvatar.innerHTML = "";
+      sidebarAvatar.textContent = currentUsername.charAt(0).toUpperCase();
+    };
+    sidebarAvatar.appendChild(img);
+  } else {
+    sidebarAvatar.textContent = currentUsername.charAt(0).toUpperCase();
+  }
 }
 
 // ============================================================
-// USERNAME CHANGE (once per week)
+// USERNAME CHANGE
 // ============================================================
 changeUsernameBtn.addEventListener("click", async () => {
   const snap = await db.ref(`adminData/allUsers/${currentUserId}/lastUsernameChange`).once("value");
@@ -516,23 +768,21 @@ changeUsernameBtn.addEventListener("click", async () => {
     usernameChangeSaveBtn.disabled = true;
   } else {
     usernameChangeCooldown.textContent = "✓ Change available";
-    usernameChangeInput.disabled = false;
+    usernameChangeInput.disabled  = false;
     usernameChangeSaveBtn.disabled = false;
   }
 
-  usernameChangeInput.value = currentUsername;
+  usernameChangeInput.value   = currentUsername;
   usernameChangeBar.style.display = "block";
   if (!usernameChangeInput.disabled) usernameChangeInput.focus();
 });
 
-usernameChangeCancelBtn.addEventListener("click", () => {
-  usernameChangeBar.style.display = "none";
-});
+usernameChangeCancelBtn.addEventListener("click", () => { usernameChangeBar.style.display = "none"; });
 
 usernameChangeSaveBtn.addEventListener("click", async () => {
   const newName = usernameChangeInput.value.trim();
   if (!newName || newName.length < 2) return alert("Username must be at least 2 characters.");
-  if (newName === currentUsername)    { usernameChangeBar.style.display = "none"; return; }
+  if (newName === currentUsername) { usernameChangeBar.style.display = "none"; return; }
 
   const snap = await db.ref(`adminData/allUsers/${currentUserId}/lastUsernameChange`).once("value");
   if (Date.now() - (snap.val() || 0) < WEEK_MS) return alert("You can only change your username once per week.");
@@ -540,36 +790,39 @@ usernameChangeSaveBtn.addEventListener("click", async () => {
   checkUsernameAvailable(newName, currentUserId, async available => {
     if (!available) return alert("That username is already taken.");
     currentUsername = newName;
-    await db.ref(`adminData/allUsers/${currentUserId}`).update({
-      username: newName,
-      lastUsernameChange: Date.now()
-    });
+    await db.ref(`adminData/allUsers/${currentUserId}`).update({ username: newName, lastUsernameChange: Date.now() });
     updateUserPanel();
     usernameChangeBar.style.display = "none";
   });
 });
 
 // ============================================================
-// BETA WARNING DISMISS
+// BETA WARNING
 // ============================================================
 const betaWarn = document.getElementById("betaWarning");
 if (betaWarn) {
   betaWarn.addEventListener("click", () => {
-    betaWarn.style.opacity = "0";
+    betaWarn.style.opacity   = "0";
     betaWarn.style.transform = "scale(0.9)";
     setTimeout(() => betaWarn.style.display = "none", 300);
   });
 }
 
 // ============================================================
-// SERVER / CHANNEL SWITCHING
+// SERVER SWITCHING
 // ============================================================
 function switchServer(serverName) {
   currentServer = serverName;
   chatbox.innerHTML = "";
   displayedMessages.clear();
+  clearReply();
 
   if (dbRef && dbListener) { dbRef.off("child_added", dbListener); dbListener = null; }
+
+  // Clean up old typing listener and reset
+  db.ref(`typing/${currentServer}`).off();
+  setTyping(false);
+  isTyping = false;
 
   dbRef = db.ref(`messages/${currentServer}`);
 
@@ -582,18 +835,16 @@ function switchServer(serverName) {
   channelName.textContent = label;
   msgInput.placeholder    = `Message #${label}`;
 
+  setupTypingListener();
+
   dbRef.orderByChild("timestamp").once("value", snap => {
     const msgs = [];
-    snap.forEach(child => {
-      msgs.push({ key: child.key, ...child.val() });
-    });
-    
+    snap.forEach(child => msgs.push({ key: child.key, ...child.val() }));
     msgs.forEach(data => {
       if (displayedMessages.has(data.key)) return;
       displayedMessages.add(data.key);
-      addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, data.key, data.timestamp);
+      addMessageToChat(data);
     });
-
     chatbox.scrollTop = chatbox.scrollHeight;
 
     const since = Date.now();
@@ -602,7 +853,7 @@ function switchServer(serverName) {
       const data = snapshot.val();
       if (displayedMessages.has(key)) return;
       displayedMessages.add(key);
-      addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key, data.timestamp);
+      addMessageToChat({ key, ...data });
     });
   });
 }
@@ -610,32 +861,66 @@ function switchServer(serverName) {
 // ============================================================
 // RENDER MESSAGE
 // ============================================================
-function addMessageToChat(name, message, time, isMine, color, senderId, messageId, timestamp = 0) {
+function addMessageToChat(data) {
+  const { key: messageId, name, message, time, userId: senderId, color, timestamp = 0, replyTo, avatarUrl } = data;
+  const isMine = senderId === currentUserId;
+
   db.ref(`adminData/userTags/${senderId}`).once("value", snap => {
-    const tags   = snap.val() || [];
+    const tags    = snap.val() || [];
     const tagHTML = tags.length
       ? `<span class="tag-glow">${tags.map(t =>
           `<span class="tag-${t.toLowerCase().replace(/\s+/g,"-")}">[${t}]</span>`
-        ).join(" ")}</span> `
+        ).join(" ")}</span>`
       : "";
 
-    const msgDiv = document.createElement("div");
+    const nameColor = color || "#ffffff";
+    const msgDiv    = document.createElement("div");
     msgDiv.classList.add("message", isMine ? "mine" : "other");
     msgDiv.setAttribute("data-message-id", messageId);
-    msgDiv.setAttribute("data-timestamp", timestamp);
-    
-    const nameColor = color || "#ffffff";
-    
+    msgDiv.setAttribute("data-timestamp",  timestamp);
+
+    // Reply quote block
+    let replyHTML = "";
+    if (replyTo) {
+      replyHTML = `
+        <div class="reply-quote">
+          <span class="reply-quote-name">${escapeHtml(replyTo.name)}</span>
+          <span class="reply-quote-text">${escapeHtml(stripHtml(replyTo.text).substring(0, 80))}</span>
+        </div>`;
+    }
+
+    // Check for @mention of current user
+    const mentionedMe = message.includes(`@${currentUsername}`);
+    if (mentionedMe) msgDiv.classList.add("mentioned");
+
+    // Parse @mentions into highlighted spans
+    const parsedMsg = message.replace(/@(\w+)/g, (match, uname) => {
+      const isMe = uname === currentUsername;
+      return `<span class="mention${isMe ? " mention-me" : ""}">${escapeHtml(match)}</span>`;
+    });
+
     msgDiv.innerHTML = `
+      ${replyHTML}
       <div class="msg-header">
         ${tagHTML}
         <span class="username" style="color:${nameColor} !important">${escapeHtml(name)}</span>
         <span class="time">${time}</span>
       </div>
-      <span class="text">${message}</span>
+      <span class="text">${parsedMsg}</span>
       <div class="reactions"></div>
     `;
 
+    // Insert avatar to the LEFT of the bubble
+    const avatarEl = buildAvatarEl(avatarUrl || null, name, nameColor, 34);
+    avatarEl.classList.add("msg-avatar");
+
+    // Wrap: avatar + bubble
+    const wrapper = document.createElement("div");
+    wrapper.classList.add("msg-wrapper", isMine ? "mine" : "other");
+    wrapper.appendChild(avatarEl);
+    wrapper.appendChild(msgDiv);
+
+    // Emoji picker
     const emojis = ["👍","😂","❤️","🔥","😮","😢","🎉","💀","👀","✅","❌","💯"];
     const picker  = document.createElement("div");
     picker.className     = "emoji-picker";
@@ -646,33 +931,77 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
       eBtn.textContent = emoji;
       eBtn.addEventListener("click", () => {
         const ref = db.ref(`messages/${currentServer}/${messageId}/reactions/${encodeEmoji(emoji)}/${currentUserId}`);
-        ref.once("value", s => {
-          s.exists() ? ref.remove() : ref.set(true);
-          picker.style.display = "none";
-        });
+        ref.once("value", s => { s.exists() ? ref.remove() : ref.set(true); picker.style.display = "none"; });
       });
       picker.appendChild(eBtn);
     });
     msgDiv.appendChild(picker);
 
-    msgDiv.addEventListener("click", e => {
+    // Context menu on click: reply + (owner) delete
+    msgDiv.addEventListener("click", async e => {
       if (e.target.closest(".reaction") || e.target.classList.contains("emoji-btn")) return;
-      document.querySelectorAll(".emoji-picker").forEach(p => {
-        if (p !== picker) p.style.display = "none";
+
+      // Close other pickers
+      document.querySelectorAll(".emoji-picker").forEach(p => { if (p !== picker) p.style.display = "none"; });
+      document.querySelectorAll(".msg-context-menu").forEach(m => m.remove());
+
+      // Build context menu
+      const menu = document.createElement("div");
+      menu.className = "msg-context-menu";
+
+      const replyBtn = document.createElement("button");
+      replyBtn.textContent = "↩ Reply";
+      replyBtn.addEventListener("click", () => {
+        setReply(messageId, name, message);
+        menu.remove();
       });
-      picker.style.display = picker.style.display === "none" ? "flex" : "none";
+      menu.appendChild(replyBtn);
+
+      // Check if user has Owner tag → can delete any message
+      const myTagsSnap = await db.ref(`adminData/userTags/${currentUserId}`).once("value");
+      const myTags     = myTagsSnap.val() || [];
+      if (myTags.includes("Owner") || senderId === currentUserId) {
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "🗑️ Delete";
+        delBtn.className   = "danger";
+        delBtn.addEventListener("click", async () => {
+          menu.remove();
+          const ok = await modConfirm("🗑️", "Delete Message?", "This message will be permanently deleted.");
+          if (ok) {
+            db.ref(`messages/${currentServer}/${messageId}`).remove();
+            wrapper.remove();
+          }
+        });
+        menu.appendChild(delBtn);
+      }
+
+      // Emoji picker toggle
+      const reactBtn = document.createElement("button");
+      reactBtn.textContent = "😀 React";
+      reactBtn.addEventListener("click", () => {
+        picker.style.display = picker.style.display === "none" ? "flex" : "none";
+        menu.remove();
+      });
+      menu.appendChild(reactBtn);
+
+      msgDiv.appendChild(menu);
+
+      // Auto-close
+      setTimeout(() => {
+        document.addEventListener("click", function close(ev) {
+          if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", close); }
+        });
+      }, 10);
     });
 
+    // Live reactions
     db.ref(`messages/${currentServer}/${messageId}/reactions`).on("value", snap => {
       const reactions   = snap.val() || {};
       const reactionDiv = msgDiv.querySelector(".reactions");
       reactionDiv.innerHTML = "";
-      
-      let hasReactions = false;
       emojis.forEach(emoji => {
         const key = encodeEmoji(emoji);
         if (!reactions[key]) return;
-        hasReactions = true;
         const count   = Object.keys(reactions[key]).length;
         const reacted = reactions[key][currentUserId] ? "reacted" : "";
         const span    = document.createElement("span");
@@ -684,32 +1013,29 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
         });
         reactionDiv.appendChild(span);
       });
-
       const isNearBottom = chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 150;
-      if (isNearBottom) {
-        chatbox.scrollTop = chatbox.scrollHeight;
-      }
+      if (isNearBottom) chatbox.scrollTop = chatbox.scrollHeight;
     });
 
-    // Intelligent insertion (sorted by timestamp)
-    const allMsgs = Array.from(chatbox.children);
-    if (allMsgs.length === 0) {
-      chatbox.appendChild(msgDiv);
+    // Intelligent insertion by timestamp
+    const allWrappers = Array.from(chatbox.children);
+    if (allWrappers.length === 0) {
+      chatbox.appendChild(wrapper);
     } else {
       let inserted = false;
-      for (let i = allMsgs.length - 1; i >= 0; i--) {
-        const existingTime = parseInt(allMsgs[i].getAttribute("data-timestamp") || "0");
+      for (let i = allWrappers.length - 1; i >= 0; i--) {
+        const child = allWrappers[i].querySelector("[data-timestamp]");
+        const existingTime = parseInt(child ? child.getAttribute("data-timestamp") : "0");
         if (existingTime <= timestamp) {
-          chatbox.insertBefore(msgDiv, allMsgs[i].nextSibling);
+          chatbox.insertBefore(wrapper, allWrappers[i].nextSibling);
           inserted = true;
           break;
         }
       }
-      if (!inserted) chatbox.insertBefore(msgDiv, chatbox.firstChild);
+      if (!inserted) chatbox.insertBefore(wrapper, chatbox.firstChild);
     }
-    
+
     chatbox.scrollTop = chatbox.scrollHeight;
-    return msgDiv;
   });
 }
 
@@ -750,10 +1076,19 @@ function isUserBanned(callback) {
   db.ref(`adminData/bannedUsers/${currentUserId}`).once("value", s => callback(s.exists()));
 }
 
+function isUserTimedOut(callback) {
+  db.ref(`adminData/timeouts/${currentUserId}`).once("value", s => {
+    const data = s.val();
+    if (!data) return callback(false, 0);
+    const remaining = data.until - Date.now();
+    callback(remaining > 0, remaining);
+  });
+}
+
 let lastSentTime = 0;
 
 function sendMessage() {
-  const now = Date.now();
+  const now    = Date.now();
   if (now - lastSentTime < 2000) return;
   const rawMsg = msgInput.value.trim();
   if (!rawMsg) return;
@@ -761,86 +1096,111 @@ function sendMessage() {
   isUserBanned(banned => {
     if (banned) { alert("You are banned from sending messages."); msgInput.value = ""; return; }
 
-    const filtered  = filterBadWords(rawMsg);
-    const formatted = parseMarkdown(filtered);
+    isUserTimedOut((timedOut, remaining) => {
+      if (timedOut) {
+        const mins = Math.ceil(remaining / 60000);
+        const hrs  = Math.floor(mins / 60);
+        const msg  = hrs > 0
+          ? `You are timed out for ${hrs}h ${mins % 60}m more.`
+          : `You are timed out for ${mins} more minute${mins !== 1 ? "s" : ""}.`;
+        alert(msg);
+        msgInput.value = "";
+        return;
+      }
 
-    db.ref(`messages/${currentServer}`).push({
-      name:      currentUsername,
-      message:   formatted,
-      time:      new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      timestamp: now,
-      color:     myColor,
-      userId:    currentUserId
-    });
+      const filtered  = filterBadWords(rawMsg);
+      const formatted = parseMarkdown(filtered);
 
-    msgInput.value = "";
-    lastSentTime   = now;
+      const msgData = {
+        name:      currentUsername,
+        message:   formatted,
+        time:      new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        timestamp: now,
+        color:     myColor,
+        userId:    currentUserId,
+        avatarUrl: myAvatar || null,
+      };
 
-    db.ref(`adminData/allUsers/${currentUserId}`).update({
-      username:      currentUsername,
-      usernameColor: myColor
+      if (replyingTo) {
+        msgData.replyTo = {
+          messageId: replyingTo.messageId,
+          name:      replyingTo.name,
+          text:      replyingTo.text,
+        };
+      }
+
+      db.ref(`messages/${currentServer}`).push(msgData);
+      msgInput.value = "";
+      lastSentTime   = now;
+      clearReply();
+
+      // Clear typing
+      clearTimeout(typingTimer);
+      isTyping = false;
+      setTyping(false);
+
+      db.ref(`adminData/allUsers/${currentUserId}`).update({
+        username: currentUsername, usernameColor: myColor, avatarUrl: myAvatar || null
+      });
     });
   });
 }
 
 sendBtn.addEventListener("click", sendMessage);
 msgInput.addEventListener("keydown", e => {
-  if (e.key === "Enter" && msgInput.value.trim() !== "/modmenu") sendMessage();
+  if (e.key === "Enter" && msgInput.value.trim() !== "/modmenu") {
+    if (mentionActive) return; // don't send while picking mention
+    sendMessage();
+  }
+  // Escape closes reply/mention
+  if (e.key === "Escape") {
+    clearReply();
+    mentionDropdown.style.display = "none";
+  }
 });
 
 // ============================================================
-// MOD MENU — FULLY REDESIGNED
+// MOD MENU
 // ============================================================
-
-// Tag color/style map
 const TAG_STYLES = {
-  "Mod":           { color: "#ff4444", bg: "rgba(255,68,68,0.15)",    border: "rgba(255,68,68,0.35)"   },
-  "Admin":         { color: "#ff9900", bg: "rgba(255,153,0,0.15)",    border: "rgba(255,153,0,0.35)"   },
-  "SN":            { color: "#5b8aff", bg: "rgba(91,138,255,0.15)",   border: "rgba(91,138,255,0.35)"  },
-  "VIP":           { color: "#ffd700", bg: "rgba(255,215,0,0.15)",    border: "rgba(255,215,0,0.35)"   },
-  "Friend":        { color: "#57f287", bg: "rgba(87,242,135,0.15)",   border: "rgba(87,242,135,0.35)"  },
-  "Tester":        { color: "#00ffff", bg: "rgba(0,255,255,0.15)",    border: "rgba(0,255,255,0.35)"   },
-  "Owner":         { color: "#ffffff", bg: "rgba(255,255,255,0.1)",   border: "rgba(255,255,255,0.25)" },
-  "Dev":           { color: "#888888", bg: "rgba(136,136,136,0.15)",  border: "rgba(136,136,136,0.3)"  },
-  "Jobless":       { color: "#a0522d", bg: "rgba(160,82,45,0.15)",    border: "rgba(160,82,45,0.35)"   },
-  "Asked for Tag": { color: "#808080", bg: "rgba(128,128,128,0.12)",  border: "rgba(128,128,128,0.28)" },
-  "Gay":           { color: null,      bg: "rgba(255,100,100,0.1)",   border: "rgba(255,100,100,0.2)"  },
+  "Mod":           { color: "#ff4444", bg: "rgba(255,68,68,0.15)",   border: "rgba(255,68,68,0.35)"   },
+  "Admin":         { color: "#ff9900", bg: "rgba(255,153,0,0.15)",   border: "rgba(255,153,0,0.35)"   },
+  "SN":            { color: "#5b8aff", bg: "rgba(91,138,255,0.15)",  border: "rgba(91,138,255,0.35)"  },
+  "VIP":           { color: "#ffd700", bg: "rgba(255,215,0,0.15)",   border: "rgba(255,215,0,0.35)"   },
+  "Friend":        { color: "#57f287", bg: "rgba(87,242,135,0.15)",  border: "rgba(87,242,135,0.35)"  },
+  "Tester":        { color: "#00ffff", bg: "rgba(0,255,255,0.15)",   border: "rgba(0,255,255,0.35)"   },
+  "Owner":         { color: "#ffffff", bg: "rgba(255,255,255,0.1)",  border: "rgba(255,255,255,0.25)" },
+  "Dev":           { color: "#888888", bg: "rgba(136,136,136,0.15)", border: "rgba(136,136,136,0.3)"  },
+  "Jobless":       { color: "#a0522d", bg: "rgba(160,82,45,0.15)",   border: "rgba(160,82,45,0.35)"   },
+  "Asked for Tag": { color: "#808080", bg: "rgba(128,128,128,0.12)", border: "rgba(128,128,128,0.28)" },
+  "Gay":           { color: null,      bg: "rgba(255,100,100,0.1)",  border: "rgba(255,100,100,0.2)"  },
 };
 
 const availableTags = ["Mod","Admin","SN","VIP","Friend","Tester","Owner","Dev","Jobless","Asked for Tag","Gay"];
-
-let allUsersCache = {};
 let selectedTagFromPalette = null;
 
-// ---- Confirm Dialog ----
+// Confirm dialog
 function modConfirm(icon, title, message) {
   return new Promise(resolve => {
     const dialog = document.getElementById("modConfirmDialog");
-    document.getElementById("confirmIcon").textContent = icon;
-    document.getElementById("confirmTitle").textContent = title;
+    document.getElementById("confirmIcon").textContent    = icon;
+    document.getElementById("confirmTitle").textContent   = title;
     document.getElementById("confirmMessage").textContent = message;
     dialog.style.display = "flex";
 
     const ok     = document.getElementById("confirmOkBtn");
     const cancel = document.getElementById("confirmCancelBtn");
-
-    // Clone to remove old listeners
-    const newOk     = ok.cloneNode(true);
-    const newCancel = cancel.cloneNode(true);
+    const newOk  = ok.cloneNode(true);
+    const newCan = cancel.cloneNode(true);
     ok.parentNode.replaceChild(newOk, ok);
-    cancel.parentNode.replaceChild(newCancel, cancel);
+    cancel.parentNode.replaceChild(newCan, cancel);
 
-    function cleanup(result) {
-      dialog.style.display = "none";
-      resolve(result);
-    }
-
-    newOk.addEventListener("click",     () => cleanup(true));
-    newCancel.addEventListener("click", () => cleanup(false));
+    const cleanup = result => { dialog.style.display = "none"; resolve(result); };
+    newOk.addEventListener("click",  () => cleanup(true));
+    newCan.addEventListener("click", () => cleanup(false));
   });
 }
 
-// ---- Copy to clipboard ----
 function copyToClipboard(text, el) {
   navigator.clipboard.writeText(text).then(() => {
     const orig = el.innerHTML;
@@ -850,7 +1210,6 @@ function copyToClipboard(text, el) {
   });
 }
 
-// ---- Setup mod menu trigger ----
 function setupModMenuTrigger() {
   msgInput.addEventListener("keydown", e => {
     if (e.key === "Enter" && msgInput.value.trim() === "/modmenu") {
@@ -864,7 +1223,6 @@ function setupModMenuTrigger() {
   });
 }
 
-// ---- Password check ----
 function checkModPassword() {
   const entered = modMenuPasswordInput.value;
   if (!entered) { showModGateMsg("Please enter the password."); return; }
@@ -887,53 +1245,48 @@ function checkModPassword() {
 modMenuEnterBtn.addEventListener("click", checkModPassword);
 modMenuPasswordInput.addEventListener("keydown", e => { if (e.key === "Enter") checkModPassword(); });
 
-// ---- Close mod menu ----
 modMenuCloseBtn.addEventListener("click", () => {
   modMenu.style.display = "none";
   modMenuPasswordGate.style.display = "none";
   db.ref("adminData/allUsers").off();
   db.ref("adminData/bannedUsers").off();
   db.ref("adminData/userTags").off();
+  db.ref("adminData/timeouts").off();
 });
 
-// ---- Tab switching ----
 function initModMenuTabs() {
   document.querySelectorAll(".modTab").forEach(tab => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".modTab").forEach(t => t.classList.remove("active"));
       document.querySelectorAll(".modTabContent").forEach(c => c.classList.remove("active"));
       tab.classList.add("active");
-      const tabId = "tab" + tab.getAttribute("data-tab").charAt(0).toUpperCase() + tab.getAttribute("data-tab").slice(1);
-      document.getElementById(tabId).classList.add("active");
+      const id = "tab" + tab.getAttribute("data-tab").charAt(0).toUpperCase() + tab.getAttribute("data-tab").slice(1);
+      document.getElementById(id).classList.add("active");
     });
   });
 }
 
-// ---- Search ----
 function initModSearch() {
   document.getElementById("modSearchInput").addEventListener("input", e => {
     renderUsersList(e.target.value.trim().toLowerCase());
   });
 }
 
-// ---- Tag Palette ----
 function buildTagPalette() {
   const palette = document.getElementById("tagPalette");
   palette.innerHTML = "";
-
   availableTags.forEach(tag => {
     const style = TAG_STYLES[tag] || {};
-    const btn = document.createElement("button");
-    btn.className = "tagPaletteBtn";
+    const btn   = document.createElement("button");
+    btn.className   = "tagPaletteBtn";
     btn.textContent = tag;
-    if (style.color) btn.style.color = style.color;
-    if (style.bg)    btn.style.background = style.bg;
+    if (style.color)  btn.style.color = style.color;
+    if (style.bg)     btn.style.background = style.bg;
     if (style.border) btn.style.borderColor = style.border;
     if (tag === "Gay") {
-      btn.style.background = "linear-gradient(to right, rgba(255,68,68,0.15), rgba(255,153,0,0.15), rgba(87,242,135,0.15), rgba(91,138,255,0.15))";
+      btn.style.background  = "linear-gradient(to right,rgba(255,68,68,0.15),rgba(255,153,0,0.15),rgba(87,242,135,0.15),rgba(91,138,255,0.15))";
       btn.style.borderColor = "rgba(255,100,100,0.3)";
     }
-
     btn.addEventListener("click", () => {
       palette.querySelectorAll(".tagPaletteBtn").forEach(b => b.classList.remove("selected"));
       if (selectedTagFromPalette === tag) {
@@ -946,103 +1299,75 @@ function buildTagPalette() {
         document.getElementById("tagUserIdInput").focus();
       }
     });
-
     palette.appendChild(btn);
   });
 }
 
-// ---- Render user list ----
 function renderUsersList(filter = "") {
-  const list = document.getElementById("allUsersList");
+  const list  = document.getElementById("allUsersList");
   list.innerHTML = "";
-  const users = allUsersCache;
   let count = 0;
 
-  for (let id in users) {
+  for (let id in allUsersCache) {
     if (id === "placeholder") continue;
-    const u = users[id];
+    const u     = allUsersCache[id];
     const name  = u.username || "Guest";
     const color = u.usernameColor || "#ffffff";
-
     if (filter && !name.toLowerCase().includes(filter) && !id.toLowerCase().includes(filter)) continue;
     count++;
 
     const card = document.createElement("div");
     card.className = "modUserCard";
 
-    // Avatar
-    const avatar = document.createElement("div");
-    avatar.className = "modUserAvatar";
-    avatar.textContent = name.charAt(0).toUpperCase();
-    avatar.style.background = `linear-gradient(135deg, ${color}cc, ${color}66)`;
+    const avatarEl = buildAvatarEl(u.avatarUrl || null, name, color, 38);
+    avatarEl.style.flexShrink = "0";
 
-    // Info
-    const info = document.createElement("div");
+    const info    = document.createElement("div");
     info.className = "modUserInfo";
-
-    const nameEl = document.createElement("div");
-    nameEl.className = "modUserName";
+    const nameEl  = document.createElement("div");
+    nameEl.className   = "modUserName";
     nameEl.textContent = name;
     nameEl.style.color = color;
-
     const idEl = document.createElement("div");
     idEl.className = "modUserId";
-    idEl.innerHTML = `<span>${id.length > 20 ? id.substring(0, 20) + "…" : id}</span><span class="copy-icon">📋</span>`;
-    idEl.title = "Click to copy User ID";
+    idEl.innerHTML = `<span>${id.length > 20 ? id.substring(0,20)+"…" : id}</span><span class="copy-icon">📋</span>`;
     idEl.addEventListener("click", () => copyToClipboard(id, idEl));
-
     info.appendChild(nameEl);
     info.appendChild(idEl);
 
-    // Actions
     const actions = document.createElement("div");
     actions.className = "modUserActions";
 
     const banBtn = document.createElement("button");
-    banBtn.className = "mod-action-btn danger sm";
+    banBtn.className   = "mod-action-btn danger sm";
     banBtn.textContent = "🚫 Ban";
     banBtn.addEventListener("click", async () => {
-      const ok = await modConfirm("🚫", "Ban User?", `Ban "${name}"? They will be unable to send messages.`);
-      if (ok) {
-        db.ref(`adminData/bannedUsers/${id}`).set(true);
-        document.querySelector('.modTab[data-tab="bans"]').click();
-      }
+      const ok = await modConfirm("🚫","Ban User?",`Ban "${name}"? They will be unable to send messages.`);
+      if (ok) { db.ref(`adminData/bannedUsers/${id}`).set(true); document.querySelector('.modTab[data-tab="bans"]').click(); }
     });
 
     const removeBtn = document.createElement("button");
-    removeBtn.className = "removeUserBtn";
+    removeBtn.className   = "removeUserBtn";
     removeBtn.textContent = "Remove";
     removeBtn.addEventListener("click", async () => {
-      const ok = await modConfirm("⚠️", "Remove User?", `Permanently remove "${name}" from the server user list? This cannot be undone.`);
-      if (ok) {
-        await Promise.all([
-          db.ref(`adminData/allUsers/${id}`).remove(),
-          db.ref(`adminData/userTags/${id}`).remove()
-        ]);
-      }
+      const ok = await modConfirm("⚠️","Remove User?",`Permanently remove "${name}" from the server?`);
+      if (ok) await Promise.all([db.ref(`adminData/allUsers/${id}`).remove(), db.ref(`adminData/userTags/${id}`).remove()]);
     });
 
     actions.appendChild(banBtn);
     actions.appendChild(removeBtn);
-
-    card.appendChild(avatar);
+    card.appendChild(avatarEl);
     card.appendChild(info);
     card.appendChild(actions);
     list.appendChild(card);
   }
 
-  // Update badge
-  document.getElementById("usersTabBadge").textContent =
-    Object.keys(users).filter(k => k !== "placeholder").length;
-
-  if (count === 0) {
-    list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🔍</div>${filter ? "No users match your search." : "No users yet."}</div>`;
-  }
+  document.getElementById("usersTabBadge").textContent = Object.keys(allUsersCache).filter(k => k !== "placeholder").length;
+  if (count === 0) list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🔍</div>${filter ? "No users match your search." : "No users yet."}</div>`;
 }
 
-// ---- Render tags list ----
 function renderTagsList(allTags) {
-  const list = document.getElementById("userTagsList");
+  const list    = document.getElementById("userTagsList");
   list.innerHTML = "";
   const entries = Object.entries(allTags).filter(([id]) => id !== "placeholder");
   document.getElementById("tagsTabBadge").textContent = entries.length;
@@ -1060,25 +1385,23 @@ function renderTagsList(allTags) {
     const card = document.createElement("div");
     card.className = "taggedUserCard";
 
-    // Header
     const header = document.createElement("div");
     header.className = "taggedUserHeader";
 
-    const nameEl = document.createElement("div");
-    nameEl.className = "taggedUserName";
+    const avatarEl = buildAvatarEl(user.avatarUrl || null, name, color, 28);
+    const nameEl   = document.createElement("div");
+    nameEl.className   = "taggedUserName";
     nameEl.textContent = name;
     nameEl.style.color = color;
-
     const idEl = document.createElement("div");
     idEl.className = "taggedUserId";
-    idEl.innerHTML = `<span>${id.length > 18 ? id.substring(0, 18) + "…" : id}</span> 📋`;
-    idEl.title = "Click to copy ID";
+    idEl.innerHTML = `<span>${id.length > 18 ? id.substring(0,18)+"…":id}</span> 📋`;
     idEl.addEventListener("click", () => copyToClipboard(id, idEl));
 
+    header.appendChild(avatarEl);
     header.appendChild(nameEl);
     header.appendChild(idEl);
 
-    // Pills
     const pillsRow = document.createElement("div");
     pillsRow.className = "taggedPills";
 
@@ -1089,31 +1412,20 @@ function renderTagsList(allTags) {
       if (style.color)  pill.style.color = style.color;
       if (style.bg)     pill.style.background = style.bg;
       if (style.border) pill.style.borderColor = style.border;
-      if (tag === "Gay") {
-        pill.style.background = "linear-gradient(to right, rgba(255,68,68,0.15), rgba(255,153,0,0.15), rgba(87,242,135,0.15), rgba(91,138,255,0.15))";
-      }
 
       const label = document.createElement("span");
       label.textContent = tag;
-
       const del = document.createElement("button");
-      del.className = "tagPillDelete";
+      del.className   = "tagPillDelete";
       del.textContent = "✕";
-      del.title = `Remove ${tag} tag`;
       del.addEventListener("click", async () => {
-        const ok = await modConfirm("🏷️", `Remove "${tag}" tag?`, `Remove the ${tag} tag from ${name}?`);
+        const ok = await modConfirm("🏷️",`Remove "${tag}" tag?`,`Remove ${tag} from ${name}?`);
         if (!ok) return;
-        db.ref(`adminData/userTags/${id}`).once("value", snap => {
-          const current = snap.val() || [];
-          const updated = current.filter(t => t !== tag);
-          if (updated.length === 0) {
-            db.ref(`adminData/userTags/${id}`).remove();
-          } else {
-            db.ref(`adminData/userTags/${id}`).set(updated);
-          }
+        db.ref(`adminData/userTags/${id}`).once("value", s => {
+          const updated = (s.val() || []).filter(t => t !== tag);
+          updated.length === 0 ? db.ref(`adminData/userTags/${id}`).remove() : db.ref(`adminData/userTags/${id}`).set(updated);
         });
       });
-
       pill.appendChild(label);
       pill.appendChild(del);
       pillsRow.appendChild(pill);
@@ -1125,9 +1437,8 @@ function renderTagsList(allTags) {
   });
 }
 
-// ---- Render banned list ----
 function renderBannedList(banned) {
-  const list = document.getElementById("bannedUsersList");
+  const list    = document.getElementById("bannedUsersList");
   list.innerHTML = "";
   const entries = Object.keys(banned).filter(k => k !== "placeholder");
   document.getElementById("bansTabBadge").textContent = entries.length;
@@ -1138,10 +1449,8 @@ function renderBannedList(banned) {
   }
 
   entries.forEach(id => {
-    const user = allUsersCache[id];
-    const displayName = user
-      ? `${user.username}  (${id.substring(0, 14)}…)`
-      : id;
+    const user  = allUsersCache[id];
+    const displayName = user ? `${user.username}  (${id.substring(0,14)}…)` : id;
 
     const card = document.createElement("div");
     card.className = "bannedCard";
@@ -1151,17 +1460,15 @@ function renderBannedList(banned) {
     icon.textContent = "🚫";
 
     const idEl = document.createElement("span");
-    idEl.className = "bannedId";
+    idEl.className   = "bannedId";
     idEl.textContent = displayName;
-    idEl.title = "Click to copy ID";
     idEl.addEventListener("click", () => copyToClipboard(id, idEl));
 
     const unbanBtn = document.createElement("button");
-    unbanBtn.className = "unbanBtn";
+    unbanBtn.className   = "unbanBtn";
     unbanBtn.textContent = "✓ Unban";
     unbanBtn.addEventListener("click", async () => {
-      const uname = user ? user.username : id;
-      const ok = await modConfirm("✅", "Unban User?", `Unban "${uname}"? They will be able to send messages again.`);
+      const ok = await modConfirm("✅","Unban User?",`Unban "${user ? user.username : id}"?`);
       if (ok) db.ref(`adminData/bannedUsers/${id}`).remove();
     });
 
@@ -1172,11 +1479,91 @@ function renderBannedList(banned) {
   });
 }
 
-// ---- INIT MOD MENU ----
+// ---- TIMEOUTS ----
+function initTimeoutTab() {
+  // Duration button selection
+  document.querySelectorAll(".timeoutDurBtn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".timeoutDurBtn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      selectedTimeoutMs = parseInt(btn.getAttribute("data-ms"));
+    });
+  });
+
+  document.getElementById("applyTimeoutBtn").addEventListener("click", async () => {
+    const id = document.getElementById("timeoutUserIdInput").value.trim();
+    if (!id)               return alert("Please enter a User ID.");
+    if (!selectedTimeoutMs) return alert("Please select a duration.");
+
+    const user  = allUsersCache[id];
+    const uname = user ? user.username : id;
+    const label = document.querySelector(`.timeoutDurBtn[data-ms="${selectedTimeoutMs}"]`)?.textContent || "";
+    const ok    = await modConfirm("⏱️","Apply Timeout?",`Timeout "${uname}" for ${label}?`);
+    if (!ok) return;
+
+    const until = Date.now() + selectedTimeoutMs;
+    await db.ref(`adminData/timeouts/${id}`).set({ until, username: uname });
+    document.getElementById("timeoutUserIdInput").value = "";
+    document.querySelectorAll(".timeoutDurBtn").forEach(b => b.classList.remove("selected"));
+    selectedTimeoutMs = null;
+  });
+}
+
+function renderTimeoutsList(timeouts) {
+  const list    = document.getElementById("activeTimeoutsList");
+  list.innerHTML = "";
+  const entries = Object.entries(timeouts).filter(([id]) => id !== "placeholder");
+
+  // Filter to only active ones
+  const active = entries.filter(([, v]) => v.until > Date.now());
+  document.getElementById("timeoutsTabBadge").textContent = active.length;
+
+  if (active.length === 0) {
+    list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">✅</div>No active timeouts.</div>`;
+    return;
+  }
+
+  active.forEach(([id, v]) => {
+    const remaining = v.until - Date.now();
+    const totalMins = Math.ceil(remaining / 60000);
+    const hrs       = Math.floor(totalMins / 60);
+    const mins      = totalMins % 60;
+    const label     = hrs > 0 ? `${hrs}h ${mins}m remaining` : `${mins}m remaining`;
+
+    const card = document.createElement("div");
+    card.className = "timeoutCard";
+
+    const info = document.createElement("div");
+    info.className = "timeoutInfo";
+    const nameEl = document.createElement("div");
+    nameEl.className   = "timeoutName";
+    nameEl.textContent = v.username || id;
+    const timeEl = document.createElement("div");
+    timeEl.className   = "timeoutRemaining";
+    timeEl.textContent = `⏱ ${label}`;
+
+    info.appendChild(nameEl);
+    info.appendChild(timeEl);
+
+    const releaseBtn = document.createElement("button");
+    releaseBtn.className   = "unbanBtn";
+    releaseBtn.textContent = "Release";
+    releaseBtn.addEventListener("click", async () => {
+      const ok = await modConfirm("✅","Release Timeout?",`End timeout for "${v.username || id}" early?`);
+      if (ok) db.ref(`adminData/timeouts/${id}`).remove();
+    });
+
+    card.appendChild(info);
+    card.appendChild(releaseBtn);
+    list.appendChild(card);
+  });
+}
+
 function initModMenu() {
   initModMenuTabs();
   initModSearch();
   buildTagPalette();
+  initTimeoutTab();
 
   // Reset to users tab
   document.querySelectorAll(".modTab").forEach(t => t.classList.remove("active"));
@@ -1184,36 +1571,26 @@ function initModMenu() {
   document.querySelector('.modTab[data-tab="users"]').classList.add("active");
   document.getElementById("tabUsers").classList.add("active");
 
-  // Live data listeners
   db.ref("adminData/allUsers").on("value", snap => {
     allUsersCache = snap.val() || {};
     const q = document.getElementById("modSearchInput").value.trim().toLowerCase();
     renderUsersList(q);
   });
 
-  db.ref("adminData/bannedUsers").on("value", snap => {
-    renderBannedList(snap.val() || {});
-  });
-
-  db.ref("adminData/userTags").on("value", snap => {
-    renderTagsList(snap.val() || {});
-  });
+  db.ref("adminData/bannedUsers").on("value", snap => renderBannedList(snap.val() || {}));
+  db.ref("adminData/userTags").on("value",    snap => renderTagsList(snap.val() || {}));
+  db.ref("adminData/timeouts").on("value",    snap => renderTimeoutsList(snap.val() || {}));
 }
 
-// ---- Ban button (ban tab) ----
 banUserBtn.addEventListener("click", async () => {
-  const id = banUserInput.value.trim();
+  const id    = banUserInput.value.trim();
   if (!id) return;
   const user  = allUsersCache[id];
   const uname = user ? user.username : id;
-  const ok    = await modConfirm("🚫", "Ban User?", `Ban "${uname}"? They will be unable to send messages.`);
-  if (ok) {
-    db.ref(`adminData/bannedUsers/${id}`).set(true);
-    banUserInput.value = "";
-  }
+  const ok    = await modConfirm("🚫","Ban User?",`Ban "${uname}"?`);
+  if (ok) { db.ref(`adminData/bannedUsers/${id}`).set(true); banUserInput.value = ""; }
 });
 
-// ---- Add tag ----
 addTagBtn.addEventListener("click", () => {
   const id  = document.getElementById("tagUserIdInput").value.trim();
   const tag = document.getElementById("tagNameInput").value.trim();
@@ -1223,10 +1600,7 @@ addTagBtn.addEventListener("click", () => {
   }
   db.ref(`adminData/userTags/${id}`).once("value", snap => {
     const current = snap.val() || [];
-    if (!current.includes(tag)) {
-      current.push(tag);
-      db.ref(`adminData/userTags/${id}`).set(current);
-    }
+    if (!current.includes(tag)) { current.push(tag); db.ref(`adminData/userTags/${id}`).set(current); }
     document.getElementById("tagUserIdInput").value = "";
     document.getElementById("tagNameInput").value   = "";
     selectedTagFromPalette = null;
@@ -1235,25 +1609,22 @@ addTagBtn.addEventListener("click", () => {
 });
 
 // ============================================================
-// CHANNEL SWITCHING CLICK HANDLERS
+// CHANNEL SWITCHING
 // ============================================================
-document.addEventListener("click", (e) => {
+document.addEventListener("click", e => {
   const btn = e.target.closest(".serverBtn");
   if (btn) {
-    const targetServer = btn.getAttribute("data-server");
-    switchServer(targetServer);
+    switchServer(btn.getAttribute("data-server"));
     document.querySelectorAll(".serverBtn").forEach(b => b.classList.remove("selected"));
     btn.classList.add("selected");
   }
 });
 
-document.querySelectorAll('.serverBtn').forEach(button => {
+document.querySelectorAll(".serverBtn").forEach(button => {
   button.onclick = () => {
-    const serverId = button.getAttribute('data-server');
-    const name = button.textContent.trim().replace('#', '').trim();
+    const serverId = button.getAttribute("data-server");
     switchServer(serverId);
-    if (channelName) channelName.textContent = name;
-    document.querySelectorAll('.serverBtn').forEach(b => b.classList.remove('selected'));
-    button.classList.add('selected');
+    document.querySelectorAll(".serverBtn").forEach(b => b.classList.remove("selected"));
+    button.classList.add("selected");
   };
 });
