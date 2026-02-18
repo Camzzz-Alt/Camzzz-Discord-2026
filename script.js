@@ -121,7 +121,7 @@ function applyTagStyleToEl(el, tag) {
   }
 }
 
-// Render a tag as an inline span with glow — matches old style
+// Render a tag as an inline span with glow
 function renderTagSpan(tag) {
   const s = getTagStyle(tag);
   if (s.rainbow) {
@@ -544,7 +544,6 @@ function updateUserPanel() {
   $("sidebarUsername").style.color = myColor;
   updateSidebarAvatar();
 
-  // Tags in their own sidebar section (under text size)
   const tagsSection = $("sidebarTagsSection");
   tagsSection.innerHTML = "";
   if (myTags.length > 0) {
@@ -705,10 +704,11 @@ function setupTypingListener() {
   db.ref(`typing/${currentServer}`).on("value", snap => {
     const typers = snap.val() || {};
     const names  = Object.entries(typers).filter(([uid]) => uid !== currentUserId).map(([,v]) => v.username);
+    const indicator = $("typingIndicator");
     if (names.length === 0) {
-      $("typingIndicator").style.display = "none";
+      indicator.style.display = "none";
     } else {
-      $("typingIndicator").style.display = "flex";
+      indicator.style.display = "flex";
       $("typingText").textContent = names.length === 1 ? `${names[0]} is typing...`
         : names.length === 2 ? `${names[0]} and ${names[1]} are typing...`
         : `${names.length} people are typing...`;
@@ -812,7 +812,7 @@ function makeInitialAvatar(username, color, size = 36) {
 }
 
 // ============================================================
-// SERVER SWITCHING — FIXED
+// SERVER SWITCHING — FIXED (no double messages)
 // ============================================================
 function switchServer(serverName) {
   // Detach old listener
@@ -830,22 +830,18 @@ function switchServer(serverName) {
   currentServer = serverName;
   if (!displayedMessages[serverName]) displayedMessages[serverName] = new Set();
 
-  // Clear chatbox
   $("chatbox").innerHTML = "";
   clearReply();
   userScrolledUp = false;
 
-  // Sidebar active state
   document.querySelectorAll(".serverBtn").forEach(btn => {
     btn.classList.toggle("selected", btn.getAttribute("data-server") === serverName);
   });
 
-  // Clear unread
   unreadServers.delete(serverName);
   const dot = $(`unread-${serverName}`);
   if (dot) dot.style.display = "none";
 
-  // Channel name
   const names = { server1:"general", server2:"general-2", private:"private", modchat:"mod-chat" };
   const label = names[serverName] || serverName;
   $("channelName").textContent   = label;
@@ -855,18 +851,20 @@ function switchServer(serverName) {
 
   const ref = db.ref(`messages/${serverName}`);
 
-  // Pre-fetch messages AND all user tags in parallel — no async inside render loop
+  // FIX: Record the time BEFORE initial load so child_added only fires for truly new messages
+  const initialLoadTime = Date.now();
+
   Promise.all([
     ref.orderByChild("timestamp").once("value"),
     db.ref("adminData/userTags").once("value")
   ]).then(([msgSnap, tagsSnap]) => {
-    if (currentServer !== serverName) return; // user switched away
+    if (currentServer !== serverName) return;
 
     const allTags = tagsSnap.val() || {};
     const msgs = [];
     msgSnap.forEach(child => msgs.push({ key: child.key, ...child.val() }));
 
-    // Re-reset dedup set right before rendering (guards against double-calls)
+    // Reset dedup set right before rendering
     displayedMessages[serverName] = new Set();
 
     msgs.forEach(data => {
@@ -877,12 +875,14 @@ function switchServer(serverName) {
 
     scrollToBottom();
 
-    // Live listener for new messages — simple child_added, dedup Set handles duplicates
-    const listener = ref.on("child_added", snapshot => {
+    // FIX: Only listen for messages with timestamp AFTER initial load began
+    // This prevents double-rendering of historical messages in private/modchat channels
+    const liveRef = ref.orderByChild("timestamp").startAt(initialLoadTime);
+    const listener = liveRef.on("child_added", snapshot => {
       if (currentServer !== serverName) return;
       const key  = snapshot.key;
       const data = snapshot.val();
-      if (displayedMessages[serverName].has(key)) return; // already rendered on initial load
+      if (displayedMessages[serverName].has(key)) return;
       displayedMessages[serverName].add(key);
       db.ref(`adminData/userTags/${data.userId}`).once("value", tSnap => {
         if (currentServer !== serverName) return;
@@ -890,7 +890,7 @@ function switchServer(serverName) {
       });
     });
 
-    dbListeners[serverName] = { ref, listener };
+    dbListeners[serverName] = { ref: liveRef, listener };
     setupUnreadListeners();
   });
 }
@@ -951,174 +951,184 @@ function renderMessage(data, serverName, isNew, tags) {
   const isMine = senderId === currentUserId;
   const nameColor = color || "#ffffff";
 
-    const msgDiv = document.createElement("div");
-    msgDiv.classList.add("message", isMine ? "mine" : "other");
-    msgDiv.setAttribute("data-message-id", messageId);
+  const msgDiv = document.createElement("div");
+  msgDiv.classList.add("message", isMine ? "mine" : "other");
+  msgDiv.setAttribute("data-message-id", messageId);
 
-    // Reply quote
-    let replyHTML = "";
-    if (replyTo) {
-      replyHTML = `<div class="reply-quote"><span class="reply-quote-name">${escapeHtml(replyTo.name)}</span><span class="reply-quote-text">${escapeHtml(stripHtml(replyTo.text).substring(0,80))}</span></div>`;
+  let replyHTML = "";
+  if (replyTo) {
+    replyHTML = `<div class="reply-quote"><span class="reply-quote-name">${escapeHtml(replyTo.name)}</span><span class="reply-quote-text">${escapeHtml(stripHtml(replyTo.text).substring(0,80))}</span></div>`;
+  }
+
+  const mentionedMe = message.includes(`@${currentUsername}`);
+  if (mentionedMe) msgDiv.classList.add("mentioned");
+
+  const parsedMsg = message.replace(/@(\w+)/g, (match, uname) => {
+    const isMe = uname === currentUsername;
+    return `<span class="mention${isMe?" mention-me":""}">${escapeHtml(match)}</span>`;
+  });
+
+  const tagHTML = tags.length
+    ? `<div class="msg-tags"><span class="tag-glow">${tags.map(t => renderTagSpan(t)).join(" ")}</span></div>`
+    : "";
+
+  const savedSize = localStorage.getItem("textSize") || "14px";
+
+  msgDiv.innerHTML = `
+    ${replyHTML}
+    ${tagHTML}
+    <div class="msg-header">
+      <span class="username" style="color:${nameColor};font-size:${savedSize};">${escapeHtml(name)}</span>
+      <span class="time">${time}</span>
+    </div>
+    <span class="text">${parsedMsg}</span>
+    <div class="reactions"></div>
+  `;
+
+  const avatarEl = buildAvatarEl(avatarUrl || null, name, nameColor, 34);
+  avatarEl.className = "msg-avatar";
+
+  const wrapper = document.createElement("div");
+  wrapper.classList.add("msg-wrapper", isMine ? "mine" : "other");
+  wrapper.setAttribute("data-timestamp", timestamp);
+  wrapper.setAttribute("data-message-id", messageId);
+  wrapper.appendChild(avatarEl);
+  wrapper.appendChild(msgDiv);
+
+  // Emoji picker
+  const emojis = ["👍","😂","❤️","🔥","😮","😢","🎉","💀","👀","✅","❌","💯"];
+  const picker  = document.createElement("div");
+  picker.className = "emoji-picker";
+  picker.style.display = "none";
+  emojis.forEach(emoji => {
+    const eBtn = document.createElement("span");
+    eBtn.className   = "emoji-btn";
+    eBtn.textContent = emoji;
+    eBtn.addEventListener("click", () => {
+      const ref = db.ref(`messages/${serverName}/${messageId}/reactions/${encodeEmoji(emoji)}/${currentUserId}`);
+      ref.once("value", s => { s.exists() ? ref.remove() : ref.set(true); picker.style.display = "none"; });
+    });
+    picker.appendChild(eBtn);
+  });
+  msgDiv.appendChild(picker);
+
+  // Listen for message deletion from other clients — remove wrapper when DB node is deleted
+  db.ref(`messages/${serverName}/${messageId}`).on("value", snap => {
+    if (!snap.exists()) {
+      wrapper.remove();
+    }
+  });
+
+  // Click → context menu
+  msgDiv.addEventListener("click", async e => {
+    if (e.target.closest(".reaction") || e.target.classList.contains("emoji-btn")) return;
+    document.querySelectorAll(".emoji-picker").forEach(p => { if (p !== picker) p.style.display = "none"; });
+    document.querySelectorAll(".msg-context-menu").forEach(m => m.remove());
+
+    const menu = document.createElement("div");
+    menu.className = "msg-context-menu";
+
+    const replyBtn = document.createElement("button");
+    replyBtn.textContent = "↩ Reply";
+    replyBtn.addEventListener("click", () => { setReply(messageId, name, message); menu.remove(); });
+    menu.appendChild(replyBtn);
+
+    const reactBtn = document.createElement("button");
+    reactBtn.textContent = "😀 React";
+    reactBtn.addEventListener("click", () => { picker.style.display = picker.style.display === "none" ? "flex" : "none"; menu.remove(); });
+    menu.appendChild(reactBtn);
+
+    const canDelete = myTags.includes("Owner") || senderId === currentUserId || myTags.includes("Mod") || myTags.includes("Admin");
+    if (canDelete) {
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "🗑️ Delete";
+      delBtn.className   = "danger";
+      delBtn.addEventListener("click", async () => {
+        menu.remove();
+        const ok = await modConfirm("🗑️","Delete Message?","This message will be permanently deleted.");
+        if (ok) {
+          // FIX: Delete from DB first — the .on("value") listener above will remove the DOM element
+          await db.ref(`messages/${serverName}/${messageId}`).remove();
+
+          // Log the deletion for everyone (not just mods)
+          logModAction({
+            type: "delete_message",
+            modName: currentUsername,
+            modId: currentUserId,
+            targetName: name,
+            targetId: senderId || "",
+            detail: `Deleted message: "${stripHtml(message).substring(0,50)}"`
+          });
+        }
+      });
+      menu.appendChild(delBtn);
     }
 
-    // Mentions
-    const mentionedMe = message.includes(`@${currentUsername}`);
-    if (mentionedMe) msgDiv.classList.add("mentioned");
+    if ((myTags.includes("Mod") || myTags.includes("Admin") || myTags.includes("Owner")) && senderId && senderId !== currentUserId) {
+      const rmPfpBtn = document.createElement("button");
+      rmPfpBtn.textContent = "🖼️ Remove PFP";
+      rmPfpBtn.className   = "danger";
+      rmPfpBtn.addEventListener("click", async () => {
+        menu.remove();
+        const ok = await modConfirm("🖼️","Remove Profile Picture?",`Remove profile picture for "${name}"?`);
+        if (ok) {
+          db.ref(`adminData/allUsers/${senderId}`).update({ avatarUrl: null });
+          logModAction({ type:"remove_pfp", modName: currentUsername, modId: currentUserId, targetName: name, targetId: senderId, detail:"Removed profile picture." });
+        }
+      });
+      menu.appendChild(rmPfpBtn);
+    }
 
-    const parsedMsg = message.replace(/@(\w+)/g, (match, uname) => {
-      const isMe = uname === currentUsername;
-      return `<span class="mention${isMe?" mention-me":""}">${escapeHtml(match)}</span>`;
-    });
+    msgDiv.appendChild(menu);
+    setTimeout(() => {
+      document.addEventListener("click", function close(ev) {
+        if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", close); }
+      });
+    }, 10);
+  });
 
-    // Tags row — using old-style glow spans
-    const tagHTML = tags.length
-      ? `<div class="msg-tags"><span class="tag-glow">${tags.map(t => renderTagSpan(t)).join(" ")}</span></div>`
-      : "";
-
-    const savedSize = localStorage.getItem("textSize") || "14px";
-
-    msgDiv.innerHTML = `
-      ${replyHTML}
-      ${tagHTML}
-      <div class="msg-header">
-        <span class="username" style="color:${nameColor};font-size:${savedSize};">${escapeHtml(name)}</span>
-        <span class="time">${time}</span>
-      </div>
-      <span class="text">${parsedMsg}</span>
-      <div class="reactions"></div>
-    `;
-
-    // Avatar
-    const avatarEl = buildAvatarEl(avatarUrl || null, name, nameColor, 34);
-    avatarEl.className = "msg-avatar";
-
-    // Wrapper — data-timestamp lives HERE so sorting works correctly
-    const wrapper = document.createElement("div");
-    wrapper.classList.add("msg-wrapper", isMine ? "mine" : "other");
-    wrapper.setAttribute("data-timestamp", timestamp);  // <-- KEY FIX: on wrapper not inner div
-    wrapper.appendChild(avatarEl);
-    wrapper.appendChild(msgDiv);
-
-    // Emoji picker
-    const emojis = ["👍","😂","❤️","🔥","😮","😢","🎉","💀","👀","✅","❌","💯"];
-    const picker  = document.createElement("div");
-    picker.className = "emoji-picker";
-    picker.style.display = "none";
+  // Live reactions
+  db.ref(`messages/${serverName}/${messageId}/reactions`).on("value", snap => {
+    const reactions   = snap.val() || {};
+    const reactionDiv = msgDiv.querySelector(".reactions");
+    if (!reactionDiv) return;
+    reactionDiv.innerHTML = "";
     emojis.forEach(emoji => {
-      const eBtn = document.createElement("span");
-      eBtn.className   = "emoji-btn";
-      eBtn.textContent = emoji;
-      eBtn.addEventListener("click", () => {
-        const ref = db.ref(`messages/${serverName}/${messageId}/reactions/${encodeEmoji(emoji)}/${currentUserId}`);
-        ref.once("value", s => { s.exists() ? ref.remove() : ref.set(true); picker.style.display = "none"; });
+      const key     = encodeEmoji(emoji);
+      if (!reactions[key]) return;
+      const count   = Object.keys(reactions[key]).length;
+      const reacted = reactions[key][currentUserId] ? "reacted" : "";
+      const span    = document.createElement("span");
+      span.className   = `reaction ${reacted}`;
+      span.textContent = `${emoji} ${count}`;
+      span.addEventListener("click", () => {
+        const ref = db.ref(`messages/${serverName}/${messageId}/reactions/${key}/${currentUserId}`);
+        ref.once("value", s => s.exists() ? ref.remove() : ref.set(true));
       });
-      picker.appendChild(eBtn);
+      reactionDiv.appendChild(span);
     });
-    msgDiv.appendChild(picker);
+  });
 
-    // Click → context menu
-    msgDiv.addEventListener("click", async e => {
-      if (e.target.closest(".reaction") || e.target.classList.contains("emoji-btn")) return;
-      document.querySelectorAll(".emoji-picker").forEach(p => { if (p !== picker) p.style.display = "none"; });
-      document.querySelectorAll(".msg-context-menu").forEach(m => m.remove());
-
-      const menu = document.createElement("div");
-      menu.className = "msg-context-menu";
-
-      const replyBtn = document.createElement("button");
-      replyBtn.textContent = "↩ Reply";
-      replyBtn.addEventListener("click", () => { setReply(messageId, name, message); menu.remove(); });
-      menu.appendChild(replyBtn);
-
-      const reactBtn = document.createElement("button");
-      reactBtn.textContent = "😀 React";
-      reactBtn.addEventListener("click", () => { picker.style.display = picker.style.display === "none" ? "flex" : "none"; menu.remove(); });
-      menu.appendChild(reactBtn);
-
-      const canDelete = myTags.includes("Owner") || senderId === currentUserId || myTags.includes("Mod") || myTags.includes("Admin");
-      if (canDelete) {
-        const delBtn = document.createElement("button");
-        delBtn.textContent = "🗑️ Delete";
-        delBtn.className   = "danger";
-        delBtn.addEventListener("click", async () => {
-          menu.remove();
-          const ok = await modConfirm("🗑️","Delete Message?","This message will be permanently deleted.");
-          if (ok) {
-            db.ref(`messages/${serverName}/${messageId}`).remove();
-            wrapper.remove();
-            if (myTags.includes("Mod")) {
-              logModAction({ type:"delete_message", modName: currentUsername, modId: currentUserId, targetName: name, targetId: senderId || "", detail: `Deleted message: "${stripHtml(message).substring(0,50)}"` });
-            }
-          }
-        });
-        menu.appendChild(delBtn);
-      }
-
-      if ((myTags.includes("Mod") || myTags.includes("Admin") || myTags.includes("Owner")) && senderId && senderId !== currentUserId) {
-        const rmPfpBtn = document.createElement("button");
-        rmPfpBtn.textContent = "🖼️ Remove PFP";
-        rmPfpBtn.className   = "danger";
-        rmPfpBtn.addEventListener("click", async () => {
-          menu.remove();
-          const ok = await modConfirm("🖼️","Remove Profile Picture?",`Remove profile picture for "${name}"?`);
-          if (ok) {
-            db.ref(`adminData/allUsers/${senderId}`).update({ avatarUrl: null });
-            logModAction({ type:"remove_pfp", modName: currentUsername, modId: currentUserId, targetName: name, targetId: senderId, detail:"Removed profile picture." });
-          }
-        });
-        menu.appendChild(rmPfpBtn);
-      }
-
-      msgDiv.appendChild(menu);
-      setTimeout(() => {
-        document.addEventListener("click", function close(ev) {
-          if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", close); }
-        });
-      }, 10);
-    });
-
-    // Live reactions
-    db.ref(`messages/${serverName}/${messageId}/reactions`).on("value", snap => {
-      const reactions   = snap.val() || {};
-      const reactionDiv = msgDiv.querySelector(".reactions");
-      if (!reactionDiv) return;
-      reactionDiv.innerHTML = "";
-      emojis.forEach(emoji => {
-        const key     = encodeEmoji(emoji);
-        if (!reactions[key]) return;
-        const count   = Object.keys(reactions[key]).length;
-        const reacted = reactions[key][currentUserId] ? "reacted" : "";
-        const span    = document.createElement("span");
-        span.className   = `reaction ${reacted}`;
-        span.textContent = `${emoji} ${count}`;
-        span.addEventListener("click", () => {
-          const ref = db.ref(`messages/${serverName}/${messageId}/reactions/${key}/${currentUserId}`);
-          ref.once("value", s => s.exists() ? ref.remove() : ref.set(true));
-        });
-        reactionDiv.appendChild(span);
-      });
-    });
-
-    // Insert in timestamp order — reads data-timestamp from WRAPPER now
-    const allWrappers = Array.from($("chatbox").children);
-    let inserted = false;
-    for (let i = allWrappers.length - 1; i >= 0; i--) {
-      const existingTime = parseInt(allWrappers[i].getAttribute("data-timestamp") || "0");
-      if (existingTime <= timestamp) {
-        $("chatbox").insertBefore(wrapper, allWrappers[i].nextSibling);
-        inserted = true;
-        break;
-      }
+  // Insert in timestamp order
+  const allWrappers = Array.from($("chatbox").children);
+  let inserted = false;
+  for (let i = allWrappers.length - 1; i >= 0; i--) {
+    const existingTime = parseInt(allWrappers[i].getAttribute("data-timestamp") || "0");
+    if (existingTime <= timestamp) {
+      $("chatbox").insertBefore(wrapper, allWrappers[i].nextSibling);
+      inserted = true;
+      break;
     }
-    if (!inserted) $("chatbox").insertBefore(wrapper, $("chatbox").firstChild);
+  }
+  if (!inserted) $("chatbox").insertBefore(wrapper, $("chatbox").firstChild);
 
-    if (isNew === true) {
-      if (!userScrolledUp) {
-        scrollToBottom();
-      } else {
-        $("scrollToBottomBtn").style.display = "flex";
-      }
+  if (isNew === true) {
+    if (!userScrolledUp) {
+      scrollToBottom();
+    } else {
+      $("scrollToBottomBtn").style.display = "flex";
     }
+  }
 }
 
 // ============================================================
@@ -1377,14 +1387,25 @@ function renderUsersList(listId, filter, actionsBuilder) {
   if (count === 0) list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🔍</div>${filter ? "No users match." : "No users yet."}</div>`;
 }
 
+// FIX: renderTaggedUsers now uses .on() for live updates
 function renderTaggedUsers(listId) {
   const list = $(listId);
   if (!list) return;
-  list.innerHTML = "";
-  db.ref("adminData/userTags").on("value", snap => {
+
+  // Detach any previous listener on this specific list
+  if (renderTaggedUsers._listeners && renderTaggedUsers._listeners[listId]) {
+    db.ref("adminData/userTags").off("value", renderTaggedUsers._listeners[listId]);
+  }
+  if (!renderTaggedUsers._listeners) renderTaggedUsers._listeners = {};
+
+  const listener = db.ref("adminData/userTags").on("value", snap => {
     const allTags = snap.val() || {};
+    list.innerHTML = "";
     const entries = Object.entries(allTags).filter(([id]) => id !== "placeholder");
-    if (!entries.length) { list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🏷️</div>No tagged users yet.</div>`; return; }
+    if (!entries.length) {
+      list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🏷️</div>No tagged users yet.</div>`;
+      return;
+    }
     entries.forEach(([id, tags]) => {
       const user  = allUsersCache[id] || {};
       const name  = user.username || "Unknown";
@@ -1411,7 +1432,6 @@ function renderTaggedUsers(listId) {
         const del   = document.createElement("button");
         del.className = "tagPillDelete"; del.textContent = "✕";
         del.addEventListener("click", async () => {
-          // Mods cannot remove protected tags
           const isMod = myTags.includes("Mod") && !myTags.includes("Admin") && !myTags.includes("Owner");
           if (isMod && MOD_PROTECTED_TAGS.includes(tag)) {
             alert(`Moderators cannot remove the "${tag}" tag.`);
@@ -1432,12 +1452,15 @@ function renderTaggedUsers(listId) {
       list.appendChild(card);
     });
   });
+
+  renderTaggedUsers._listeners[listId] = listener;
 }
 
 function renderBannedList(listId) {
   const list = $(listId);
   if (!list) return;
-  db.ref("adminData/bannedUsers").once("value", snap => {
+  // Use live listener
+  db.ref("adminData/bannedUsers").on("value", snap => {
     list.innerHTML = "";
     const banned = snap.val() || {};
     const entries = Object.keys(banned).filter(k => k !== "placeholder");
@@ -1465,7 +1488,8 @@ function renderBannedList(listId) {
 function renderTimeoutsList(listId) {
   const list = $(listId);
   if (!list) return;
-  db.ref("adminData/timeouts").once("value", snap => {
+  // Use live listener
+  db.ref("adminData/timeouts").on("value", snap => {
     list.innerHTML = "";
     const timeouts = snap.val() || {};
     const active = Object.entries(timeouts).filter(([id, v]) => v.until > Date.now());
@@ -1505,6 +1529,19 @@ function setupTimeoutButtons(btnClass, getSelected, setSelected, inputId, applyB
     const id = $(inputId).value.trim();
     if (!id) return alert("Please enter a User ID.");
     if (!getSelected()) return alert("Please select a duration.");
+
+    // FIX: Mods cannot timeout users with Mod, Admin, or Owner tags
+    const targetTags = await db.ref(`adminData/userTags/${id}`).once("value").then(s => s.val() || []);
+    const isMod = myTags.includes("Mod") && !myTags.includes("Admin") && !myTags.includes("Owner");
+    if (isMod) {
+      const protectedModTags = ["Mod", "Admin", "Owner"];
+      const hasProtected = targetTags.some(t => protectedModTags.includes(t));
+      if (hasProtected) {
+        alert("You cannot timeout another Mod, Admin, or Owner.");
+        return;
+      }
+    }
+
     const user  = allUsersCache[id];
     const uname = user ? user.username : id;
     const durLabel = document.querySelector(`.${btnClass}[data-ms="${getSelected()}"]`)?.textContent || "";
@@ -1515,8 +1552,119 @@ function setupTimeoutButtons(btnClass, getSelected, setSelected, inputId, applyB
     $(inputId).value = "";
     document.querySelectorAll(`.${btnClass}`).forEach(b => b.classList.remove("selected"));
     setSelected(null);
-    if (myTags.includes("Mod")) logModAction({ type:"timeout", modName:currentUsername, modId:currentUserId, targetName:uname, targetId:id, detail:`Timed out for ${durLabel}` });
-    renderTimeoutsList(`${label}ActiveTimeoutsList`);
+    logModAction({ type:"timeout", modName:currentUsername, modId:currentUserId, targetName:uname, targetId:id, detail:`Timed out for ${durLabel}` });
+  });
+}
+
+// ============================================================
+// TAG VIEWER — shows all tags with users under each
+// ============================================================
+function renderTagViewer(listId) {
+  const list = $(listId);
+  if (!list) return;
+  list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">⏳</div>Loading...</div>`;
+
+  db.ref("adminData/userTags").on("value", snap => {
+    const allUserTags = snap.val() || {};
+    list.innerHTML = "";
+
+    // Build a map: tag -> [{id, user}]
+    const tagMap = {};
+    for (const [uid, tags] of Object.entries(allUserTags)) {
+      if (uid === "placeholder") continue;
+      if (!Array.isArray(tags)) continue;
+      tags.forEach(tag => {
+        if (!tagMap[tag]) tagMap[tag] = [];
+        tagMap[tag].push(uid);
+      });
+    }
+
+    const allTagNames = availableTags.filter(t => tagMap[t] && tagMap[t].length > 0);
+    // Also include any custom tags that have users
+    Object.keys(tagMap).forEach(t => { if (!allTagNames.includes(t)) allTagNames.push(t); });
+
+    if (!allTagNames.length) {
+      list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">🏷️</div>No tagged users yet.</div>`;
+      return;
+    }
+
+    allTagNames.forEach(tag => {
+      const uids = tagMap[tag] || [];
+      const s = getTagStyle(tag);
+
+      const section = document.createElement("div");
+      section.className = "tag-viewer-section";
+
+      const header = document.createElement("div");
+      header.className = "tag-viewer-header";
+
+      const tagLabel = document.createElement("span");
+      tagLabel.className = "tag-viewer-tag-label";
+      tagLabel.textContent = `[${tag}]`;
+      if (s.rainbow) {
+        tagLabel.style.background = "linear-gradient(to right,#ff4444,#ff9900,#57f287,#5b8aff,#c084fc)";
+        tagLabel.style.webkitBackgroundClip = "text";
+        tagLabel.style.webkitTextFillColor = "transparent";
+        tagLabel.style.backgroundClip = "text";
+      } else {
+        tagLabel.style.color = s.color || "#aaa";
+        tagLabel.style.textShadow = `0 0 8px ${s.color || "#aaa"}88`;
+      }
+
+      const countBadge = document.createElement("span");
+      countBadge.className = "tag-viewer-count";
+      countBadge.textContent = uids.length;
+      if (s.color && !s.rainbow) {
+        countBadge.style.background = s.bg || "rgba(255,255,255,0.1)";
+        countBadge.style.color = s.color;
+        countBadge.style.borderColor = s.border || "transparent";
+      }
+
+      header.appendChild(tagLabel);
+      header.appendChild(countBadge);
+      section.appendChild(header);
+
+      const userRows = document.createElement("div");
+      userRows.className = "tag-viewer-users";
+
+      if (uids.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "tag-viewer-no-users";
+        empty.textContent = "No users with this tag.";
+        userRows.appendChild(empty);
+      } else {
+        uids.forEach(uid => {
+          const user = allUsersCache[uid] || {};
+          const name = user.username || "Unknown";
+          const color = user.usernameColor || "#ffffff";
+
+          const row = document.createElement("div");
+          row.className = "tag-viewer-user-row";
+
+          const av = buildAvatarEl(user.avatarUrl || null, name, color, 26);
+          av.style.flexShrink = "0";
+
+          const nameEl = document.createElement("span");
+          nameEl.className = "tag-viewer-username";
+          nameEl.textContent = name;
+          nameEl.style.color = color;
+
+          const idEl = document.createElement("span");
+          idEl.className = "tag-viewer-uid";
+          idEl.textContent = uid.length > 16 ? uid.substring(0, 16) + "…" : uid;
+          idEl.title = uid;
+          idEl.addEventListener("click", () => copyToClipboard(uid, idEl));
+
+          row.appendChild(av);
+          row.appendChild(nameEl);
+          row.appendChild(idEl);
+          userRows.appendChild(row);
+        });
+      }
+
+      section.appendChild(userRows);
+      list.appendChild(section);
+    });
   });
 }
 
@@ -1566,9 +1714,7 @@ function initAdminMenu() {
       const current = s.val() || [];
       if (!current.includes(tag)) {
         current.push(tag);
-        db.ref(`adminData/userTags/${id}`).set(current).then(() => {
-          renderTaggedUsers("adminTaggedUsersList"); // refresh display
-        });
+        db.ref(`adminData/userTags/${id}`).set(current);
       }
       $("adminTagUserIdInput").value = ""; $("adminTagNameInput").value = ""; adminSelectedTag = null;
       document.querySelectorAll("#adminTagPalette .tagPaletteBtn").forEach(b=>b.classList.remove("selected"));
@@ -1585,6 +1731,7 @@ function initAdminMenu() {
   renderBannedList("adminBannedList");
   renderTaggedUsers("adminTaggedUsersList");
   renderTimeoutsList("adminActiveTimeoutsList");
+  renderTagViewer("adminTagViewerList");
 
   setupTimeoutButtons("admin-dur", () => adminSelectedMs, v => { adminSelectedMs = v; }, "adminTimeoutUserIdInput", "adminApplyTimeoutBtn", "admin");
 
@@ -1639,7 +1786,7 @@ function setupTagCreator() {
 function refreshCustomTagsList() {
   const list = $("customTagsList");
   if (!list) return;
-  db.ref("adminData/customTags").once("value", snap => {
+  db.ref("adminData/customTags").on("value", snap => {
     list.innerHTML = "";
     const custom = snap.val() || {};
     if (!Object.keys(custom).length) { list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">✨</div>No custom tags yet.</div>`; return; }
@@ -1668,24 +1815,29 @@ function refreshCustomTagsList() {
 }
 
 // ============================================================
-// MOD LOGS
+// MOD LOGS — FIX: show ALL logs in correct order
 // ============================================================
 function loadModLogs() {
   const list = $("modActionLogList");
   if (!list) return;
-  db.ref("adminData/modLogs").orderByChild("ts").limitToLast(50).on("value", snap => {
+  // Use live listener, fetch more logs, reverse for newest-first display
+  db.ref("adminData/modLogs").orderByChild("ts").limitToLast(100).on("value", snap => {
     list.innerHTML = "";
     const logs = [];
-    snap.forEach(child => logs.push(child.val()));
-    logs.reverse().forEach(log => {
+    snap.forEach(child => logs.push({ key: child.key, ...child.val() }));
+    logs.reverse(); // newest first
+    if (!logs.length) {
+      list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">📋</div>No mod actions logged yet.</div>`;
+      return;
+    }
+    logs.forEach(log => {
       const row = document.createElement("div");
       row.className = "log-row";
       const ts   = new Date(log.ts).toLocaleString();
-      const icon = { delete_message:"🗑️", remove_pfp:"🖼️", timeout:"⏱️", remove_tag:"🏷️" }[log.type] || "📋";
-      row.innerHTML = `<span class="log-icon">${icon}</span><div class="log-info"><div class="log-action">${escapeHtml(log.modName)} — ${escapeHtml(log.detail||log.type)}</div><div class="log-target">Target: ${escapeHtml(log.targetName||log.targetId||"?")} &middot; ${ts}</div></div>`;
+      const icon = { delete_message:"🗑️", remove_pfp:"🖼️", timeout:"⏱️", remove_tag:"🏷️", add_tag:"🏷️" }[log.type] || "📋";
+      row.innerHTML = `<span class="log-icon">${icon}</span><div class="log-info"><div class="log-action">${escapeHtml(log.modName||"Unknown")} — ${escapeHtml(log.detail||log.type||"")}</div><div class="log-target">Target: ${escapeHtml(log.targetName||log.targetId||"?")} · ${ts}</div></div>`;
       list.appendChild(row);
     });
-    if (!logs.length) list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">📋</div>No mod actions logged yet.</div>`;
   });
 }
 
@@ -1740,9 +1892,7 @@ function initModMenu() {
       const current = s.val() || [];
       if (!current.includes(tag)) {
         current.push(tag);
-        db.ref(`adminData/userTags/${id}`).set(current).then(() => {
-          renderTaggedUsers("modTaggedUsersList"); // refresh display
-        });
+        db.ref(`adminData/userTags/${id}`).set(current);
       }
       $("modTagUserIdInput").value = ""; $("modTagNameInput").value = ""; modSelectedTag = null;
       document.querySelectorAll("#modTagPalette .tagPaletteBtn").forEach(b=>b.classList.remove("selected"));
@@ -1752,6 +1902,7 @@ function initModMenu() {
 
   renderTaggedUsers("modTaggedUsersList");
   renderTimeoutsList("modActiveTimeoutsList");
+  renderTagViewer("modTagViewerList");
   setupTimeoutButtons("mod-dur", () => modSelectedMs, v => { modSelectedMs = v; }, "modTimeoutUserIdInput", "modApplyTimeoutBtn", "mod");
 }
 
