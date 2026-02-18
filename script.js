@@ -644,7 +644,7 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
     msgDiv.setAttribute("data-timestamp", timestamp); // Store timestamp for sorting
     
     // Fix color readability for "mine" messages
-    const nameColor = isMine ? "#ffffff" : (color || "#fff");
+    const nameColor = color || "#ffffff";
     
     msgDiv.innerHTML = `
       <div class="msg-header">
