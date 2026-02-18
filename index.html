@@ -88,7 +88,7 @@
       <p class="auth-switch">Already have one? <a id="showLoginBtn" href="#">Sign in</a></p>
     </div>
 
-    <!-- GOOGLE USERNAME PICKER (new Google users only) -->
+    <!-- GOOGLE USERNAME PICKER -->
     <div class="auth-card" id="googleUsernameCard" style="display:none;">
       <div class="auth-logo">
         <img class="logo-icon-img" src="https://i.imgur.com/ELHSqM3.png" alt="Logo">
@@ -168,6 +168,10 @@
           <span>🏷️</span> Tags
           <span class="modTabBadge" id="tagsTabBadge">0</span>
         </button>
+        <button class="modTab" data-tab="timeouts">
+          <span>⏱️</span> Timeouts
+          <span class="modTabBadge" id="timeoutsTabBadge">0</span>
+        </button>
       </div>
 
       <!-- TAB: USERS -->
@@ -211,6 +215,30 @@
         </div>
       </div>
 
+      <!-- TAB: TIMEOUTS -->
+      <div class="modTabContent" id="tabTimeouts">
+        <div class="modSectionInner">
+          <label class="modLabel">Timeout a User</label>
+          <div class="inputRow" style="margin-bottom:12px;">
+            <input id="timeoutUserIdInput" placeholder="Enter User ID">
+          </div>
+          <label class="modLabel">Duration</label>
+          <div class="timeoutDurationGrid">
+            <button class="timeoutDurBtn" data-ms="300000">5 min</button>
+            <button class="timeoutDurBtn" data-ms="1800000">30 min</button>
+            <button class="timeoutDurBtn" data-ms="3600000">1 hour</button>
+            <button class="timeoutDurBtn" data-ms="21600000">6 hours</button>
+            <button class="timeoutDurBtn" data-ms="86400000">24 hours</button>
+            <button class="timeoutDurBtn" data-ms="604800000">1 week</button>
+          </div>
+          <button id="applyTimeoutBtn" class="mod-action-btn" style="margin-top:12px;width:100%;">⏱️ Apply Timeout</button>
+        </div>
+        <div class="modSectionInner">
+          <label class="modLabel">Active Timeouts</label>
+          <div id="activeTimeoutsList"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -226,6 +254,9 @@
       </div>
     </div>
   </div>
+
+  <!-- ========== AVATAR UPLOAD INPUT (hidden) ========== -->
+  <input type="file" id="avatarFileInput" accept="image/*" style="display:none;">
 
   <!-- ========== LOADING SCREEN ========== -->
   <div id="loadingScreen" style="display:none;">
@@ -254,13 +285,25 @@
         <button class="serverBtn" data-server="server2"><span class="channel-hash">#</span> general-2</button>
       </div>
       <div class="sidebar-section">
+        <!-- Online count -->
+        <div class="sidebar-section-label">ONLINE</div>
+        <div id="onlineCountDisplay" class="online-count-display">
+          <span class="online-dot"></span>
+          <span id="onlineCountNum">0</span> online
+        </div>
+      </div>
+      <div class="sidebar-section">
         <div class="sidebar-section-label">APPEARANCE</div>
         <div id="colorPickerBtn"></div>
         <div id="themeColorSection"></div>
         <div id="textSizeSection"></div>
       </div>
       <div class="sidebar-user-panel">
-        <div class="user-avatar" id="sidebarAvatar">?</div>
+        <!-- Clickable avatar -->
+        <div class="user-avatar-wrap" id="sidebarAvatarWrap" title="Click to change profile picture">
+          <div class="user-avatar" id="sidebarAvatar">?</div>
+          <div class="avatar-upload-overlay">📷</div>
+        </div>
         <div class="user-info">
           <div id="sidebarUsername" class="user-name">Loading...</div>
           <div class="user-status">● Online</div>
@@ -277,6 +320,22 @@
         <div id="betaWarning">⚠ Beta — messages may lag. Click to dismiss.</div>
       </div>
       <div id="chatbox"></div>
+
+      <!-- Typing indicator -->
+      <div id="typingIndicator" class="typing-indicator" style="display:none;">
+        <div class="typing-dots"><span></span><span></span><span></span></div>
+        <span id="typingText"></span>
+      </div>
+
+      <!-- Reply bar -->
+      <div id="replyBar" style="display:none;">
+        <div class="reply-bar-inner">
+          <span class="reply-bar-label">↩ Replying to <strong id="replyToName"></strong></span>
+          <span class="reply-bar-preview" id="replyToPreview"></span>
+          <button id="cancelReplyBtn">✕</button>
+        </div>
+      </div>
+
       <div id="usernameChangeBar" style="display:none;">
         <div class="username-change-inner">
           <input id="usernameChangeInput" placeholder="New username" maxlength="24">
@@ -285,6 +344,10 @@
           <button id="usernameChangeCancelBtn">Cancel</button>
         </div>
       </div>
+
+      <!-- @mention autocomplete -->
+      <div id="mentionDropdown" class="mention-dropdown" style="display:none;"></div>
+
       <div id="inputArea">
         <button id="changeUsernameBtn" class="input-icon-btn" title="Change username">✏️</button>
         <input id="msgInput" placeholder="Message #general">
