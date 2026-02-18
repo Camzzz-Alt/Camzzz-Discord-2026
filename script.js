@@ -1081,3 +1081,24 @@ document.addEventListener("click", (e) => {
     btn.classList.add("selected");
   }
 });
+
+// ============================================================
+// EMERGENCY FIX FOR CHANNEL SWITCHING
+// ============================================================
+document.querySelectorAll('.serverBtn').forEach(button => {
+    button.onclick = () => {
+        const serverId = button.getAttribute('data-server');
+        const name = button.textContent.trim().replace('#', '');
+        
+        // Force the switch
+        switchServer(serverId);
+        
+        // Force the UI update
+        if (channelName) channelName.textContent = name;
+        document.querySelectorAll('.serverBtn').forEach(b => b.classList.remove('selected'));
+        button.classList.add('selected');
+    };
+});
+
+// SELF-REPAIR: Run this in your browser console (F12) if it still fails:
+// localStorage.clear(); location.reload();
