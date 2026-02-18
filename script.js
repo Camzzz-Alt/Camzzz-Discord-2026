@@ -20,7 +20,7 @@ const db   = firebase.database();
 const WEEK_MS   = 7 * 24 * 60 * 60 * 1000;
 const IMGBB_KEY = "7ae7b64cb4da961ab6a7d18d920099a8";
 
-// Built-in tags (color, bg, border)
+// Built-in tags
 const BUILTIN_TAG_STYLES = {
   "Mod":                   { color: "#ff4444", bg: "rgba(255,68,68,0.15)",   border: "rgba(255,68,68,0.35)"   },
   "Admin":                 { color: "#ff9900", bg: "rgba(255,153,0,0.15)",   border: "rgba(255,153,0,0.35)"   },
@@ -37,11 +37,9 @@ const BUILTIN_TAG_STYLES = {
   "Private Channel Access":{ color: "#a78bfa", bg: "rgba(167,139,250,0.15)", border: "rgba(167,139,250,0.35)" },
 };
 
-// Live merged tag styles (builtin + custom from Firebase)
 let TAG_STYLES = { ...BUILTIN_TAG_STYLES };
 let availableTags = Object.keys(BUILTIN_TAG_STYLES);
 
-// Tags that grant special access
 const PRIVATE_CHANNEL_TAG = "Private Channel Access";
 const MOD_TAGS = ["Mod", "Admin", "Owner"];
 
@@ -55,39 +53,27 @@ let myColor         = "#5865f2";
 let myAvatar        = null;
 let myTags          = [];
 let currentServer   = "server1";
-let dbListeners     = {}; // { server: { ref, listener } }
-let displayedMessages = {}; // { server: Set }
+let dbListeners     = {};
+let displayedMessages = {};
 let allUsersCache   = {};
 
-// Reply
-let replyingTo = null;
-
-// Typing
-let typingTimer = null;
-let isTyping    = false;
-
-// Timeout selection
+let replyingTo      = null;
+let typingTimer     = null;
+let isTyping        = false;
 let adminSelectedMs = null;
 let modSelectedMs   = null;
-
-// Tag selection in menus
 let adminSelectedTag = null;
 let modSelectedTag   = null;
-
-// Unread tracking
-let unreadServers = new Set();
-
-// Scroll tracking
-let userScrolledUp = false;
-
-// Dedup send guard
-let lastSentKey = null;
+let unreadServers   = new Set();
+let userScrolledUp  = false;
+let sendingInProgress = false;
+let lastSentTime    = 0;
 
 // ============================================================
 // DOM HELPERS
 // ============================================================
 const $  = id => document.getElementById(id);
-const showError = (el, msg) => { el.textContent = msg; el.classList.add("show"); };
+const showError  = (el, msg) => { el.textContent = msg; el.classList.add("show"); };
 const clearError = el => { el.textContent = ""; el.classList.remove("show"); };
 
 function escapeHtml(str) {
@@ -133,16 +119,17 @@ function applyTagStyleToEl(el, tag) {
   }
 }
 
+// Render a tag as an inline span with glow — matches old style
 function renderTagSpan(tag) {
   const s = getTagStyle(tag);
   if (s.rainbow) {
-    return `<span class="tag-pill-inline tag-gay">[${escapeHtml(tag)}]</span>`;
+    return `<span class="tag-inline tag-gay">[${escapeHtml(tag)}]</span>`;
   }
   const color = s.color || "#aaa";
-  return `<span class="tag-pill-inline" style="color:${color};text-shadow:0 0 8px ${color}88;">[${escapeHtml(tag)}]</span>`;
+  const slugClass = "tag-" + tag.toLowerCase().replace(/\s+/g, "-");
+  return `<span class="tag-inline ${slugClass}" style="color:${color};text-shadow:0 0 8px ${color}88;">[${escapeHtml(tag)}]</span>`;
 }
 
-// Load custom tags from Firebase and merge
 function loadCustomTags(cb) {
   db.ref("adminData/customTags").on("value", snap => {
     const custom = snap.val() || {};
@@ -208,11 +195,7 @@ function copyToClipboard(text, el) {
 // MOD ACTION LOG
 // ============================================================
 function logModAction(action) {
-  // action: { type, modName, modId, targetName, targetId, detail, ts }
-  db.ref("adminData/modLogs").push({
-    ...action,
-    ts: Date.now()
-  });
+  db.ref("adminData/modLogs").push({ ...action, ts: Date.now() });
 }
 
 // ============================================================
@@ -299,7 +282,6 @@ $("googleUsernameConfirmBtn").addEventListener("click", async () => {
       username: name, usernameColor: "#5865f2", lastUsernameChange: 0, email: pendingGoogleUser.email || ""
     });
     pendingGoogleUser = null;
-    // auth state change will pick up
   });
 });
 
@@ -380,7 +362,7 @@ auth.onAuthStateChanged(async user => {
   const isGoogle = user.providerData[0]?.providerId === "google.com";
   if (!isGoogle && !user.emailVerified) { await auth.signOut(); return; }
   const snap = await db.ref(`adminData/allUsers/${user.uid}`).once("value");
-  if (!snap.exists()) return; // google username not set yet
+  if (!snap.exists()) return;
   currentUser   = user;
   currentUserId = user.uid;
   $("authScreen").style.display = "none";
@@ -393,7 +375,6 @@ auth.onAuthStateChanged(async user => {
 $("logoutBtn").addEventListener("click", () => {
   cleanupPresence();
   setTyping(false);
-  // detach all channel listeners
   Object.values(dbListeners).forEach(({ ref: r, listener: l }) => r && r.off && r.off("child_added", l));
   dbListeners = {};
   auth.signOut();
@@ -459,7 +440,6 @@ function buildSidebar() {
 }
 
 function buildSpecialChannelButtons() {
-  // Private channel
   const privBtn = $("privateChannelBtn");
   privBtn.innerHTML = "";
   if (myTags.includes(PRIVATE_CHANNEL_TAG) || myTags.includes("Owner") || myTags.includes("Admin")) {
@@ -471,7 +451,6 @@ function buildSpecialChannelButtons() {
     privBtn.appendChild(btn);
   }
 
-  // Mod chat
   const modBtn = $("modChatBtn");
   modBtn.innerHTML = "";
   const hasMod = myTags.some(t => MOD_TAGS.includes(t));
@@ -556,15 +535,12 @@ function buildTextSizePicker() {
 
 function applyTextSize(size) {
   $("chatbox").style.fontSize = size;
-  // also apply to username in messages
-  document.querySelectorAll(".message .username").forEach(el => el.style.fontSize = size);
 }
 
 function updateUserPanel() {
   $("sidebarUsername").textContent = currentUsername;
   $("sidebarUsername").style.color = myColor;
   updateSidebarAvatar();
-  // Show user's own tags in sidebar
   const tagsDiv = $("sidebarUserTags");
   tagsDiv.innerHTML = "";
   myTags.forEach(tag => {
@@ -796,7 +772,11 @@ function showMentionDropdown(query) {
   });
   $("mentionDropdown").style.display = "block";
 }
-document.addEventListener("click", e => { if (!$("mentionDropdown").contains(e.target) && e.target !== $("msgInput")) { $("mentionDropdown").style.display = "none"; } });
+document.addEventListener("click", e => {
+  if (!$("mentionDropdown").contains(e.target) && e.target !== $("msgInput")) {
+    $("mentionDropdown").style.display = "none";
+  }
+});
 
 // ============================================================
 // AVATAR ELEMENT BUILDER
@@ -819,17 +799,16 @@ function makeInitialAvatar(username, color, size = 36) {
 }
 
 // ============================================================
-// SERVER SWITCHING — ISOLATED (fixes cross-channel bug)
+// SERVER SWITCHING — FIXED
 // ============================================================
 function switchServer(serverName) {
-  // Detach listener for old server
+  // Detach old listener
   if (dbListeners[currentServer]) {
     const { ref: r, listener: l } = dbListeners[currentServer];
     if (r && l) r.off("child_added", l);
     delete dbListeners[currentServer];
   }
 
-  // Stop typing in old server
   setTyping(false);
   isTyping = false;
   clearTimeout(typingTimer);
@@ -838,16 +817,17 @@ function switchServer(serverName) {
   currentServer = serverName;
   if (!displayedMessages[serverName]) displayedMessages[serverName] = new Set();
 
+  // Clear chatbox
   $("chatbox").innerHTML = "";
   clearReply();
   userScrolledUp = false;
 
-  // Update sidebar button states
+  // Sidebar active state
   document.querySelectorAll(".serverBtn").forEach(btn => {
     btn.classList.toggle("selected", btn.getAttribute("data-server") === serverName);
   });
 
-  // Clear unread for this server
+  // Clear unread
   unreadServers.delete(serverName);
   const dot = $(`unread-${serverName}`);
   if (dot) dot.style.display = "none";
@@ -862,21 +842,25 @@ function switchServer(serverName) {
 
   const ref = db.ref(`messages/${serverName}`);
 
-  // Load existing messages first
+  // Load existing messages first, THEN attach live listener
   ref.orderByChild("timestamp").once("value", snap => {
     const msgs = [];
     snap.forEach(child => msgs.push({ key: child.key, ...child.val() }));
+
+    // Clear dedup set for this server to avoid stale keys preventing renders
+    displayedMessages[serverName] = new Set();
+
     msgs.forEach(data => {
       if (displayedMessages[serverName].has(data.key)) return;
       displayedMessages[serverName].add(data.key);
       addMessageToChat(data, serverName, false);
     });
+
     scrollToBottom();
 
-    // Then listen for new messages only after load
+    // Only listen for messages AFTER the current timestamp
     const since = Date.now();
     const listener = ref.orderByChild("timestamp").startAt(since).on("child_added", snapshot => {
-      // Guard: only process if still on this server
       if (currentServer !== serverName) return;
       const key  = snapshot.key;
       const data = snapshot.val();
@@ -886,8 +870,6 @@ function switchServer(serverName) {
     });
 
     dbListeners[serverName] = { ref, listener };
-
-    // Also listen on all servers for unread dots
     setupUnreadListeners();
   });
 }
@@ -901,7 +883,6 @@ let unreadTimestamps = {};
 function setupUnreadListeners() {
   ALL_SERVERS.forEach(server => {
     if (server === currentServer) return;
-    // Remove old listener
     db.ref(`messages/${server}`).off("child_added");
     const since = unreadTimestamps[server] || Date.now();
     db.ref(`messages/${server}`).orderByChild("timestamp").startAt(since).on("child_added", snap => {
@@ -922,9 +903,7 @@ $("chatbox").addEventListener("scroll", () => {
   const cb = $("chatbox");
   const distFromBottom = cb.scrollHeight - cb.scrollTop - cb.clientHeight;
   userScrolledUp = distFromBottom > 120;
-  if (!userScrolledUp) {
-    $("scrollToBottomBtn").style.display = "none";
-  }
+  if (!userScrolledUp) $("scrollToBottomBtn").style.display = "none";
 });
 
 $("scrollToBottomBtn").addEventListener("click", () => {
@@ -939,12 +918,11 @@ function scrollToBottom() {
 }
 
 // ============================================================
-// RENDER MESSAGE
+// RENDER MESSAGE — FIXED (data-timestamp on wrapper)
 // ============================================================
 function addMessageToChat(data, serverName, isNew) {
   const { key: messageId, name, message, time, userId: senderId, color, timestamp = 0, replyTo, avatarUrl } = data;
 
-  // Check access for private/modchat
   if (serverName === "private" && !myTags.includes(PRIVATE_CHANNEL_TAG) && !myTags.includes("Owner") && !myTags.includes("Admin")) return;
   if (serverName === "modchat"  && !myTags.some(t => MOD_TAGS.includes(t))) return;
 
@@ -953,11 +931,10 @@ function addMessageToChat(data, serverName, isNew) {
   db.ref(`adminData/userTags/${senderId}`).once("value", snap => {
     const tags = snap.val() || [];
     const nameColor = color || "#ffffff";
-    const msgDiv    = document.createElement("div");
+
+    const msgDiv = document.createElement("div");
     msgDiv.classList.add("message", isMine ? "mine" : "other");
     msgDiv.setAttribute("data-message-id", messageId);
-    msgDiv.setAttribute("data-timestamp",  timestamp);
-    msgDiv.setAttribute("data-sender",     senderId || "");
 
     // Reply quote
     let replyHTML = "";
@@ -974,9 +951,9 @@ function addMessageToChat(data, serverName, isNew) {
       return `<span class="mention${isMe?" mention-me":""}">${escapeHtml(match)}</span>`;
     });
 
-    // Tags HTML — shown above username
+    // Tags row — using old-style glow spans
     const tagHTML = tags.length
-      ? `<div class="msg-tags">${tags.map(t => renderTagSpan(t)).join(" ")}</div>`
+      ? `<div class="msg-tags"><span class="tag-glow">${tags.map(t => renderTagSpan(t)).join(" ")}</span></div>`
       : "";
 
     const savedSize = localStorage.getItem("textSize") || "14px";
@@ -992,12 +969,14 @@ function addMessageToChat(data, serverName, isNew) {
       <div class="reactions"></div>
     `;
 
-    // Wrapper: avatar LEFT, bubble RIGHT
+    // Avatar
     const avatarEl = buildAvatarEl(avatarUrl || null, name, nameColor, 34);
     avatarEl.className = "msg-avatar";
 
+    // Wrapper — data-timestamp lives HERE so sorting works correctly
     const wrapper = document.createElement("div");
     wrapper.classList.add("msg-wrapper", isMine ? "mine" : "other");
+    wrapper.setAttribute("data-timestamp", timestamp);  // <-- KEY FIX: on wrapper not inner div
     wrapper.appendChild(avatarEl);
     wrapper.appendChild(msgDiv);
 
@@ -1027,19 +1006,16 @@ function addMessageToChat(data, serverName, isNew) {
       const menu = document.createElement("div");
       menu.className = "msg-context-menu";
 
-      // Reply
       const replyBtn = document.createElement("button");
       replyBtn.textContent = "↩ Reply";
       replyBtn.addEventListener("click", () => { setReply(messageId, name, message); menu.remove(); });
       menu.appendChild(replyBtn);
 
-      // React
       const reactBtn = document.createElement("button");
       reactBtn.textContent = "😀 React";
       reactBtn.addEventListener("click", () => { picker.style.display = picker.style.display === "none" ? "flex" : "none"; menu.remove(); });
       menu.appendChild(reactBtn);
 
-      // Delete — Owner tag OR your own message OR Mod tag
       const canDelete = myTags.includes("Owner") || senderId === currentUserId || myTags.includes("Mod") || myTags.includes("Admin");
       if (canDelete) {
         const delBtn = document.createElement("button");
@@ -1059,7 +1035,6 @@ function addMessageToChat(data, serverName, isNew) {
         menu.appendChild(delBtn);
       }
 
-      // Remove profile picture — Mod action
       if ((myTags.includes("Mod") || myTags.includes("Admin") || myTags.includes("Owner")) && senderId && senderId !== currentUserId) {
         const rmPfpBtn = document.createElement("button");
         rmPfpBtn.textContent = "🖼️ Remove PFP";
@@ -1105,12 +1080,11 @@ function addMessageToChat(data, serverName, isNew) {
       });
     });
 
-    // Insert by timestamp order
+    // Insert in timestamp order — reads data-timestamp from WRAPPER now
     const allWrappers = Array.from($("chatbox").children);
     let inserted = false;
     for (let i = allWrappers.length - 1; i >= 0; i--) {
-      const child = allWrappers[i].querySelector("[data-timestamp]");
-      const existingTime = parseInt(child ? child.getAttribute("data-timestamp") : "0");
+      const existingTime = parseInt(allWrappers[i].getAttribute("data-timestamp") || "0");
       if (existingTime <= timestamp) {
         $("chatbox").insertBefore(wrapper, allWrappers[i].nextSibling);
         inserted = true;
@@ -1119,8 +1093,7 @@ function addMessageToChat(data, serverName, isNew) {
     }
     if (!inserted) $("chatbox").insertBefore(wrapper, $("chatbox").firstChild);
 
-    // Scroll behavior — don't force scroll if user is reading old messages
-    if (isNew && isNew === true) {
+    if (isNew === true) {
       if (!userScrolledUp) {
         scrollToBottom();
       } else {
@@ -1154,11 +1127,8 @@ function parseMarkdown(msg) {
 }
 
 // ============================================================
-// SEND MESSAGE — with dedup and channel isolation
+// SEND MESSAGE
 // ============================================================
-let lastSentTime = 0;
-let sendingInProgress = false;
-
 function isUserBanned(cb)    { db.ref(`adminData/bannedUsers/${currentUserId}`).once("value", s => cb(s.exists())); }
 function isUserTimedOut(cb)  {
   db.ref(`adminData/timeouts/${currentUserId}`).once("value", s => {
@@ -1172,7 +1142,7 @@ function isUserTimedOut(cb)  {
 function sendMessage() {
   const now    = Date.now();
   if (sendingInProgress) return;
-  if (now - lastSentTime < 1500) return; // rate limit
+  if (now - lastSentTime < 1500) return;
   const rawMsg = $("msgInput").value.trim();
   if (!rawMsg) return;
 
@@ -1190,7 +1160,7 @@ function sendMessage() {
       sendingInProgress = true;
       const filtered  = filterBadWords(rawMsg);
       const formatted = parseMarkdown(filtered);
-      const capturedServer = currentServer; // capture at time of send to prevent cross-channel
+      const capturedServer = currentServer;
 
       const msgData = {
         name:      currentUsername,
@@ -1228,7 +1198,7 @@ $("msgInput").addEventListener("keydown", e => {
   if (e.key === "Enter") {
     if (mentionActive) return;
     const val = $("msgInput").value.trim();
-    if (val === "/adminmenu" || val === "/mod") return; // handled by triggers
+    if (val === "/adminmenu" || val === "/mod") return;
     sendMessage();
   }
   if (e.key === "Escape") { clearReply(); $("mentionDropdown").style.display = "none"; }
@@ -1254,7 +1224,6 @@ function setupMenuTriggers() {
     if (val === "/mod") {
       e.preventDefault();
       $("msgInput").value = "";
-      // Check if user has a mod-level tag
       if (!myTags.some(t => MOD_TAGS.includes(t))) {
         alert("You don't have permission to open the mod panel.");
         return;
@@ -1264,7 +1233,6 @@ function setupMenuTriggers() {
     }
   });
 
-  // Admin password gate
   $("adminMenuEnterBtn").addEventListener("click", checkAdminPassword);
   $("adminMenuPasswordInput").addEventListener("keydown", e => { if (e.key === "Enter") checkAdminPassword(); });
   $("adminMenuCloseBtn").addEventListener("click", closeAdminMenu);
@@ -1475,7 +1443,7 @@ function renderTimeoutsList(listId) {
   db.ref("adminData/timeouts").once("value", snap => {
     list.innerHTML = "";
     const timeouts = snap.val() || {};
-    const active = Object.entries(timeouts).filter(([,[v]]) => true).filter(([id, v]) => v.until > Date.now());
+    const active = Object.entries(timeouts).filter(([id, v]) => v.until > Date.now());
     if (!active.length) { list.innerHTML = `<div class="modEmpty"><div class="modEmptyIcon">✅</div>No active timeouts.</div>`; return; }
     active.forEach(([id, v]) => {
       const remaining = v.until - Date.now();
@@ -1533,7 +1501,6 @@ function setupTimeoutButtons(btnClass, getSelected, setSelected, inputId, applyB
 function initAdminMenu() {
   initMenuTabs("#adminMenu .modMenuContainer");
 
-  // Load all users
   db.ref("adminData/allUsers").on("value", snap => {
     allUsersCache = snap.val() || {};
     const filter = $("adminSearchInput").value.trim().toLowerCase();
@@ -1591,13 +1558,9 @@ function initAdminMenu() {
 
   setupTimeoutButtons("admin-dur", () => adminSelectedMs, v => { adminSelectedMs = v; }, "adminTimeoutUserIdInput", "adminApplyTimeoutBtn", "admin");
 
-  // Tag creation
   setupTagCreator();
-
-  // Mod logs
   loadModLogs();
 
-  // Update badge counts
   db.ref("adminData/bannedUsers").on("value", s => $("adminBansTabBadge").textContent = s.numChildren());
   db.ref("adminData/timeouts").on("value", s => {
     const active = Object.values(s.val()||{}).filter(v => v.until > Date.now()).length;
@@ -1665,7 +1628,7 @@ function refreshCustomTagsList() {
       delBtn.className   = "removeUserBtn";
       delBtn.style.fontSize = "11px";
       delBtn.addEventListener("click", async () => {
-        const ok = await modConfirm("🗑️",`Delete tag "${name}"?`,"This will remove the tag from the palette. Users who already have it keep it until manually removed.");
+        const ok = await modConfirm("🗑️",`Delete tag "${name}"?`,"This will remove the tag from the palette.");
         if (ok) await db.ref(`adminData/customTags/${name}`).remove();
       });
       row.appendChild(label); row.appendChild(delBtn);
@@ -1709,12 +1672,10 @@ function initModMenu() {
       const timeoutBtn = document.createElement("button");
       timeoutBtn.className = "mod-action-btn sm"; timeoutBtn.textContent = "⏱️ Timeout";
       timeoutBtn.addEventListener("click", () => {
-        // Switch to timeouts tab and pre-fill ID
         const timeoutTab = document.querySelector('#modMenu .modTab[data-tab="modTimeouts"]');
         if (timeoutTab) timeoutTab.click();
         $("modTimeoutUserIdInput").value = id;
       });
-
       const removePfpBtn = document.createElement("button");
       removePfpBtn.className = "removeUserBtn"; removePfpBtn.textContent = "Remove PFP";
       removePfpBtn.addEventListener("click", async () => {
@@ -1759,7 +1720,7 @@ function initModMenu() {
 }
 
 // ============================================================
-// CHANNEL BUTTONS EVENT DELEGATION
+// CHANNEL BUTTONS
 // ============================================================
 document.addEventListener("click", e => {
   const btn = e.target.closest(".serverBtn");
