@@ -608,14 +608,16 @@ function switchServer(serverName) {
       addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key);
     });
 
-    // Then listen for brand-new messages
+// Then listen for brand-new messages
     const since = Date.now();
     dbListener = dbRef.orderByChild("timestamp").startAt(since).on("child_added", snapshot => {
       const key  = snapshot.key;
       const data = snapshot.val();
       if (displayedMessages.has(key) || (data.timestamp || 0) < since) return;
       displayedMessages.add(key);
-      addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key);
+      
+      // Add message, then ensuring sorting
+      const element = addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key, data.timestamp);
     });
   });
 }
@@ -627,7 +629,7 @@ document.querySelectorAll(".serverBtn").forEach(btn => {
 // ============================================================
 // RENDER MESSAGE
 // ============================================================
-function addMessageToChat(name, message, time, isMine, color, senderId, messageId) {
+function addMessageToChat(name, message, time, isMine, color, senderId, messageId, timestamp = 0) {
   db.ref(`adminData/userTags/${senderId}`).once("value", snap => {
     const tags   = snap.val() || [];
     const tagHTML = tags.length
@@ -639,17 +641,22 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
     const msgDiv = document.createElement("div");
     msgDiv.classList.add("message", isMine ? "mine" : "other");
     msgDiv.setAttribute("data-message-id", messageId);
+    msgDiv.setAttribute("data-timestamp", timestamp); // Store timestamp for sorting
+    
+    // Fix color readability for "mine" messages
+    const nameColor = isMine ? "#ffffff" : (color || "#fff");
+    
     msgDiv.innerHTML = `
       <div class="msg-header">
         ${tagHTML}
-        <span class="username" style="color:${color || "#fff"}">${escapeHtml(name)}</span>
+        <span class="username" style="color:${nameColor}">${escapeHtml(name)}</span>
         <span class="time">${time}</span>
       </div>
       <span class="text">${message}</span>
       <div class="reactions"></div>
     `;
 
-    // Emoji picker
+    // Emoji picker setup
     const emojis = ["👍","😂","❤️","🔥","😮","😢","🎉","💀","👀","✅","❌","💯"];
     const picker  = document.createElement("div");
     picker.className     = "emoji-picker";
@@ -671,7 +678,6 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
 
     msgDiv.addEventListener("click", e => {
       if (e.target.closest(".reaction") || e.target.classList.contains("emoji-btn")) return;
-      // Close any other open pickers
       document.querySelectorAll(".emoji-picker").forEach(p => {
         if (p !== picker) p.style.display = "none";
       });
@@ -699,8 +705,34 @@ function addMessageToChat(name, message, time, isMine, color, senderId, messageI
       });
     });
 
-    chatbox.appendChild(msgDiv);
+    // INTELLIGENT INSERTION (Fixes order bug)
+    const allMsgs = Array.from(chatbox.children);
+    if (allMsgs.length === 0) {
+      chatbox.appendChild(msgDiv);
+    } else {
+      let inserted = false;
+      // Search from bottom up
+      for (let i = allMsgs.length - 1; i >= 0; i--) {
+        const existingTime = parseInt(allMsgs[i].getAttribute("data-timestamp") || "0");
+        if (existingTime <= timestamp) {
+          if (allMsgs[i].nextSibling) {
+            chatbox.insertBefore(msgDiv, allMsgs[i].nextSibling);
+          } else {
+            chatbox.appendChild(msgDiv);
+          }
+          inserted = true;
+          break;
+        }
+      }
+      // If it's the oldest message
+      if (!inserted) {
+        chatbox.insertBefore(msgDiv, chatbox.firstChild);
+      }
+    }
+    
+    // Auto scroll if near bottom
     chatbox.scrollTop = chatbox.scrollHeight;
+    return msgDiv;
   });
 }
 
