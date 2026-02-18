@@ -598,34 +598,137 @@ function switchServer(serverName) {
   channelName.textContent = label;
   msgInput.placeholder    = `Message #${label}`;
 
-  // 1. Load message history first (sorted)
+  // Use once() to get history and sort it correctly once
   dbRef.orderByChild("timestamp").once("value", snap => {
-    const msgs = snap.val() || {};
-    const sorted = Object.entries(msgs).sort((a,b) => (a[1].timestamp||0) - (b[1].timestamp||0));
+    const msgs = [];
+    snap.forEach(child => {
+      msgs.push({ key: child.key, ...child.val() });
+    });
     
-    sorted.forEach(([key, data]) => {
-      if (displayedMessages.has(key)) return;
-      displayedMessages.add(key);
-      // We pass data.timestamp here so the sorting works
-      addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key, data.timestamp);
+    // Render historical messages in correct order
+    msgs.forEach(data => {
+      if (displayedMessages.has(data.key)) return;
+      displayedMessages.add(data.key);
+      addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, data.key, data.timestamp);
     });
 
-    // 2. Then listen for brand-new incoming messages
+    // Scroll to bottom immediately after loading history
+    chatbox.scrollTop = chatbox.scrollHeight;
+
+    // Listen for NEW messages only
     const since = Date.now();
     dbListener = dbRef.orderByChild("timestamp").startAt(since).on("child_added", snapshot => {
       const key  = snapshot.key;
       const data = snapshot.val();
-      if (displayedMessages.has(key) || (data.timestamp || 0) < since) return;
+      if (displayedMessages.has(key)) return;
       displayedMessages.add(key);
-      // We pass data.timestamp here as well
       addMessageToChat(data.name, data.message, data.time, data.userId === currentUserId, data.color, data.userId, key, data.timestamp);
     });
   });
 }
 
-document.querySelectorAll(".serverBtn").forEach(btn => {
-  btn.addEventListener("click", () => switchServer(btn.getAttribute("data-server")));
-});
+function addMessageToChat(name, message, time, isMine, color, senderId, messageId, timestamp = 0) {
+  db.ref(`adminData/userTags/${senderId}`).once("value", snap => {
+    const tags   = snap.val() || [];
+    const tagHTML = tags.length
+      ? `<span class="tag-glow">${tags.map(t =>
+          `<span class="tag-${t.toLowerCase().replace(/\s+/g,"-")}">[${t}]</span>`
+        ).join(" ")}</span> `
+      : "";
+
+    const msgDiv = document.createElement("div");
+    msgDiv.classList.add("message", isMine ? "mine" : "other");
+    msgDiv.setAttribute("data-message-id", messageId);
+    msgDiv.setAttribute("data-timestamp", timestamp);
+    
+    // Fix: Force the username color using !important to override CSS
+    const nameColor = color || "#ffffff";
+    
+    msgDiv.innerHTML = `
+      <div class="msg-header">
+        ${tagHTML}
+        <span class="username" style="color:${nameColor} !important">${escapeHtml(name)}</span>
+        <span class="time">${time}</span>
+      </div>
+      <span class="text">${message}</span>
+      <div class="reactions"></div>
+    `;
+
+    // Emoji picker setup
+    const emojis = ["👍","😂","❤️","🔥","😮","😢","🎉","💀","👀","✅","❌","💯"];
+    const picker  = document.createElement("div");
+    picker.className     = "emoji-picker";
+    picker.style.display = "none";
+    emojis.forEach(emoji => {
+      const eBtn = document.createElement("span");
+      eBtn.className   = "emoji-btn";
+      eBtn.textContent = emoji;
+      eBtn.addEventListener("click", () => {
+        const ref = db.ref(`messages/${currentServer}/${messageId}/reactions/${encodeEmoji(emoji)}/${currentUserId}`);
+        ref.once("value", s => {
+          s.exists() ? ref.remove() : ref.set(true);
+          picker.style.display = "none";
+        });
+      });
+      picker.appendChild(eBtn);
+    });
+    msgDiv.appendChild(picker);
+
+    msgDiv.addEventListener("click", e => {
+      if (e.target.closest(".reaction") || e.target.classList.contains("emoji-btn")) return;
+      document.querySelectorAll(".emoji-picker").forEach(p => {
+        if (p !== picker) p.style.display = "none";
+      });
+      picker.style.display = picker.style.display === "none" ? "flex" : "none";
+    });
+
+    // Live reactions + AUTO SCROLL ON REACTION
+    db.ref(`messages/${currentServer}/${messageId}/reactions`).on("value", snap => {
+      const reactions   = snap.val() || {};
+      const reactionDiv = msgDiv.querySelector(".reactions");
+      reactionDiv.innerHTML = "";
+      
+      let hasReactions = false;
+      emojis.forEach(emoji => {
+        const key = encodeEmoji(emoji);
+        if (!reactions[key]) return;
+        hasReactions = true;
+        const count   = Object.keys(reactions[key]).length;
+        const reacted = reactions[key][currentUserId] ? "reacted" : "";
+        const span    = document.createElement("span");
+        span.className   = `reaction ${reacted}`;
+        span.textContent = `${emoji} ${count}`;
+        span.addEventListener("click", () => {
+          const ref = db.ref(`messages/${currentServer}/${messageId}/reactions/${key}/${currentUserId}`);
+          ref.once("value", s => s.exists() ? ref.remove() : ref.set(true));
+        });
+        reactionDiv.appendChild(span);
+      });
+
+      // If a reaction was added, push the chat down
+      if (hasReactions) {
+        setTimeout(() => { chatbox.scrollTop = chatbox.scrollHeight; }, 50);
+      }
+    });
+
+    // Insertion Logic
+    const allMsgs = Array.from(chatbox.children);
+    let inserted = false;
+    for (let i = allMsgs.length - 1; i >= 0; i--) {
+      const existingTime = parseInt(allMsgs[i].getAttribute("data-timestamp") || "0");
+      if (existingTime <= timestamp) {
+        chatbox.insertBefore(msgDiv, allMsgs[i].nextSibling);
+        inserted = true;
+        break;
+      }
+    }
+    if (!inserted) chatbox.insertBefore(msgDiv, chatbox.firstChild);
+    
+    // Always scroll to bottom when a new message is added
+    chatbox.scrollTop = chatbox.scrollHeight;
+    return msgDiv;
+  });
+}
 
 // ============================================================
 // RENDER MESSAGE
