@@ -1469,3 +1469,197 @@ input, button, textarea, select {
 
 /* ========== MISC ========== */
 #serverIndicator { display: none; }
+
+/* ============================================================
+   INTEGRATED UPDATES: NEW FEATURES (AVATARS, REPLIES, TYPING)
+   ============================================================ */
+
+/* ========== PROFILE PICTURES & AVATARS ========== */
+/* This updates your existing .message layout to support Discord-style avatars */
+.message-wrapper {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 4px 16px;
+  transition: background 0.1s ease;
+}
+
+.message-wrapper:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  cursor: pointer;
+  background: var(--bg-lighter);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: white;
+  position: relative;
+  overflow: hidden;
+}
+
+.avatar-upload-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition);
+  font-size: 9px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.user-avatar:hover .avatar-upload-overlay {
+  opacity: 1;
+}
+
+/* ========== REPLY SYSTEM ========== */
+#replyBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-mid);
+  padding: 8px 16px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.reply-content {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 85%;
+}
+
+.reply-quote {
+  font-size: 12px;
+  color: var(--text-muted);
+  border-left: 2px solid var(--text-dim);
+  padding-left: 8px;
+  margin-bottom: 4px;
+  opacity: 0.8;
+}
+
+/* ========== TYPING INDICATOR ========== */
+#typingBar {
+  height: 24px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.dot {
+  width: 4px;
+  height: 4px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: typingBounce 1.4s infinite ease-in-out;
+}
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-4px); }
+}
+
+/* ========== MENTIONS & HIGHLIGHTS ========== */
+.mention-dropdown {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 20px;
+  width: 220px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 100;
+}
+
+.mention-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.mention-item:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.message-ping-highlight {
+  background: rgba(250, 166, 26, 0.1) !important;
+  border-left: 3px solid #faa61a !important;
+}
+
+/* ========== MOD MENU: TIMEOUT TAB ========== */
+.timeout-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 16px;
+}
+
+.timeout-btn {
+  padding: 12px;
+  background: var(--bg-lighter);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.timeout-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+/* ========== ONLINE PULSE INDICATOR ========== */
+.online-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 10px 16px;
+}
+
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--green);
+  border-radius: 50%;
+  position: relative;
+}
+
+.pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
