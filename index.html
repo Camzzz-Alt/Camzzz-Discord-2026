@@ -135,33 +135,94 @@
   <!-- ========== MOD MENU ========== -->
   <div id="modMenu" style="display:none;">
     <div class="modMenuContainer">
+
+      <!-- Header -->
       <div class="modMenuHeader">
-        <h2>⚙️ Moderator Menu</h2>
+        <div class="modMenuHeaderLeft">
+          <span class="modMenuIcon">⚙️</span>
+          <div>
+            <h2>Moderator Panel</h2>
+            <p class="modMenuSubtitle">Server administration controls</p>
+          </div>
+        </div>
         <button id="modMenuCloseBtn">✕ Close</button>
       </div>
-      <div class="modSection">
-        <h3>All Users</h3>
+
+      <!-- Search Bar -->
+      <div class="modSearchBar">
+        <span class="modSearchIcon">🔍</span>
+        <input id="modSearchInput" type="text" placeholder="Search users by name or ID..." autocomplete="off">
+      </div>
+
+      <!-- Tab Bar -->
+      <div class="modTabBar">
+        <button class="modTab active" data-tab="users">
+          <span>👥</span> Users
+          <span class="modTabBadge" id="usersTabBadge">0</span>
+        </button>
+        <button class="modTab" data-tab="bans">
+          <span>🚫</span> Bans
+          <span class="modTabBadge" id="bansTabBadge">0</span>
+        </button>
+        <button class="modTab" data-tab="tags">
+          <span>🏷️</span> Tags
+          <span class="modTabBadge" id="tagsTabBadge">0</span>
+        </button>
+      </div>
+
+      <!-- TAB: USERS -->
+      <div class="modTabContent active" id="tabUsers">
         <div id="allUsersList"></div>
       </div>
-      <div class="modSection">
-        <h3>Ban User</h3>
-        <div class="inputRow">
-          <input id="banUserInput" placeholder="Enter User ID">
-          <button id="banUserBtn" class="mod-action-btn">Ban</button>
+
+      <!-- TAB: BANS -->
+      <div class="modTabContent" id="tabBans">
+        <div class="modSectionInner">
+          <label class="modLabel">Ban a User by ID</label>
+          <div class="inputRow">
+            <input id="banUserInput" placeholder="Enter User ID">
+            <button id="banUserBtn" class="mod-action-btn danger">🚫 Ban</button>
+          </div>
+        </div>
+        <div class="modSectionInner">
+          <label class="modLabel">Currently Banned</label>
+          <div id="bannedUsersList"></div>
         </div>
       </div>
-      <div class="modSection">
-        <h3>Banned Users</h3>
-        <div id="bannedUsersList"></div>
-      </div>
-      <div class="modSection">
-        <h3>Manage Tags</h3>
-        <div class="inputRow">
-          <input id="tagUserIdInput" placeholder="User ID">
-          <input id="tagNameInput" placeholder="Tag (Mod, Admin, VIP...)">
-          <button id="addTagBtn" class="mod-action-btn">Add Tag</button>
+
+      <!-- TAB: TAGS -->
+      <div class="modTabContent" id="tabTags">
+        <div class="modSectionInner">
+          <label class="modLabel">Available Tags — click to select</label>
+          <div id="tagPalette" class="tagPalette"></div>
         </div>
-        <div id="userTagsList"></div>
+        <div class="modSectionInner">
+          <label class="modLabel">Apply Tag to User</label>
+          <div class="inputRow">
+            <input id="tagUserIdInput" placeholder="User ID">
+            <input id="tagNameInput" placeholder="Tag name (or click above)" readonly>
+            <button id="addTagBtn" class="mod-action-btn">➕ Add</button>
+          </div>
+          <p class="modHint">Click a tag above to auto-fill, then enter the User ID and hit Add.</p>
+        </div>
+        <div class="modSectionInner">
+          <label class="modLabel">Tagged Users</label>
+          <div id="userTagsList"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========== CONFIRM DIALOG ========== -->
+  <div id="modConfirmDialog" style="display:none;">
+    <div class="confirmCard">
+      <div class="confirmIcon" id="confirmIcon">⚠️</div>
+      <h3 id="confirmTitle">Are you sure?</h3>
+      <p id="confirmMessage">This action cannot be undone.</p>
+      <div class="confirmBtns">
+        <button id="confirmCancelBtn" class="confirmBtn cancel">Cancel</button>
+        <button id="confirmOkBtn" class="confirmBtn ok">Confirm</button>
       </div>
     </div>
   </div>
