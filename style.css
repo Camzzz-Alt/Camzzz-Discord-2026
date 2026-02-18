@@ -786,7 +786,7 @@ input, button, textarea, select {
 }
 .message .username { font-weight: 700; font-size: 13px; }
 .message .time { font-size: 10px; color: rgba(255,255,255,0.4); font-weight: 500; }
-.message .text { font-size: 14px; line-height: 1.45; font-weight: 500; }
+.message .text { font-size: inherit; line-height: 1.45; font-weight: 500; }
 
 /* Tags */
 .tag-glow { font-weight: 800; font-size: 11px; }
