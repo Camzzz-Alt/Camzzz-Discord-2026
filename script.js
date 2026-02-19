@@ -1203,18 +1203,48 @@ async function removePfp(id,name,canRemoveOwner) {
 // ============================================================
 function loadModLogs(panelListeners) {
   const list=$("modActionLogList"); if(!list) return;
-  // Use the ref as-is for the query; store it so teardown can off() it
-  const logsRef=db.ref("adminData/modLogs").orderByChild("ts").limitToLast(500);
+  const logsRef=db.ref("adminData/modLogs").limitToLast(500);
+  
   panelOn(panelListeners,logsRef,"value",snap=>{
-    list.innerHTML=""; const logs=[];
-    snap.forEach(child=>logs.push({key:child.key,...child.val()}));
-    logs.reverse(); // newest first
-    if(!logs.length){list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">📋</div>No mod actions logged yet.</div>`;return;}
+    list.innerHTML=""; 
+    const logs=[];
+    
+    snap.forEach(child => {
+      logs.push({key:child.key, ...child.val()});
+    });
+
+    // reverse() puts the most recent push keys at the top
+    logs.reverse(); 
+
+    if(!logs.length){
+      list.innerHTML=`<div class="modEmpty"><div class="modEmptyIcon">📋</div>No mod actions logged yet.</div>`;
+      return;
+    }
+
     logs.forEach(log=>{
-      const row=document.createElement("div"); row.className="log-row";
-      const ts=new Date(log.ts).toLocaleString();
-      const icon={delete_message:"🗑️",remove_pfp:"🖼️",timeout:"⏱️",remove_tag:"🏷️",add_tag:"🏷️"}[log.type]||"📋";
-      row.innerHTML=`<span class="log-icon">${icon}</span><div class="log-info"><div class="log-action">${escapeHtml(log.modName||"Unknown")} — ${escapeHtml(log.detail||log.type||"")}</div><div class="log-target">Target: ${escapeHtml(log.targetName||log.targetId||"?")} · ${ts}</div></div>`;
+      const row=document.createElement("div"); 
+      row.className="log-row";
+      
+      // Fallback to Date.now() if ts is missing in older logs
+      const ts = new Date(log.ts || Date.now()).toLocaleString();
+      const icon = {
+        delete_message: "🗑️",
+        remove_pfp: "🖼️",
+        timeout: "⏱️",
+        remove_tag: "🏷️",
+        add_tag: "🏷️"
+      }[log.type] || "📋";
+
+      row.innerHTML = `
+        <span class="log-icon">${icon}</span>
+        <div class="log-info">
+          <div class="log-action">
+            ${escapeHtml(log.modName || "Unknown")} — ${escapeHtml(log.detail || log.type || "")}
+          </div>
+          <div class="log-target">
+            Target: ${escapeHtml(log.targetName || log.targetId || "?")} · ${ts}
+          </div>
+        </div>`;
       list.appendChild(row);
     });
   });
